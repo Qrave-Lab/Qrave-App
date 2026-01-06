@@ -8,6 +8,17 @@ export default function LoginScreen({ navigation }) {
 
   const doLogin = async () => {
     if (!email || !password) return Alert.alert("Enter email and password");
+    // temporary hardcoded admin credentials
+    if (email === 'admin' && password === 'admin') {
+      const adminUser = { name: 'Administrator', email: 'admin' };
+      try {
+        await AsyncStorage.setItem('user', JSON.stringify(adminUser));
+      } catch (e) {
+        console.warn('Failed to save user', e);
+      }
+      return navigation.replace('Admin', { user: adminUser });
+    }
+
     const mockUser = { name: "Hotel Admin", email };
     try {
       await AsyncStorage.setItem("user", JSON.stringify(mockUser));

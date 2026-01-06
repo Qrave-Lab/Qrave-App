@@ -29,12 +29,19 @@ export default function DashboardScreen() {
   const { pushNotificationLocal } = useContext(NotificationContext);
 
   useEffect(() => {
+    // Check if user is logged in
     (async () => {
       try {
-        const s = await AsyncStorage.getItem("orders");
-        if (s) setOrders(JSON.parse(s));
+        const user = await AsyncStorage.getItem("user");
+        if (!user) {
+          router.replace("/");
+        } else {
+          // Load orders if user is logged in
+          const s = await AsyncStorage.getItem("orders");
+          if (s) setOrders(JSON.parse(s));
+        }
       } catch (e) {
-        console.warn("Failed to load orders", e);
+        console.warn("Failed to check user", e);
       }
     })();
   }, []);
@@ -68,6 +75,17 @@ export default function DashboardScreen() {
     ]);
   };
 
+  // Immediate logout (no confirmation)
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem("user");
+    } catch (e) {
+      console.warn("Failed to remove user during logout", e);
+    }
+    // navigate to login
+    router.replace("/");
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -81,6 +99,9 @@ export default function DashboardScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={[styles.headerBtn, { backgroundColor: "#ff3b30" }]} onPress={clearOrders}>
             <Text style={styles.headerBtnText}>Clear</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.headerBtn, { backgroundColor: "#ff9500" }]} onPress={logout}>
+            <Text style={styles.headerBtnText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>

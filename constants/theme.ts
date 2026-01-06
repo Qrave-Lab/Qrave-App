@@ -27,6 +27,15 @@ export const Colors = {
   },
 };
 
+export const AdminColors = {
+  primary: '#945DC4',
+  secondary: '#B08FC2',
+  accent: '#B993E4',
+  background: '#FBF8FE',
+  card: '#FFFFFF',
+  text: '#1a1226',
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

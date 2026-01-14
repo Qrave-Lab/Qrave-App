@@ -1,6 +1,6 @@
-import React from "react";
-import { Tabs } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { HapticTab } from "../../components/haptic-tab";
+import AdminButton from "../../components/AdminButton";
 import { IconSymbol } from "../../components/ui/icon-symbol";
 import { AdminColors } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/use-color-scheme";
@@ -12,6 +12,9 @@ import {
   TouchableOpacity,
 } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Tabs, useRouter } from "expo-router";
+import LogoutButton from "../../components/LogoutButton";
 
 const styles = StyleSheet.create({
   tabWrap: {
@@ -55,41 +58,43 @@ function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           minWidth: "100%",
         }}
       >
-        {state.routes.map((route, idx) => {
-          const focused = state.index === idx;
-          const label =
-            (descriptors[route.key].options.title as string) ?? route.name;
-          const icon = iconsMap[route.name] ?? "circle";
+        {state.routes
+          .filter((route) => route.name !== "profile")
+          .map((route, idx) => {
+            const focused = state.index === idx;
+            const label =
+              (descriptors[route.key].options.title as string) ?? route.name;
+            const icon = iconsMap[route.name] ?? "circle";
 
-          return (
-            <TouchableOpacity
-              key={route.key}
-              onPress={() => navigation.navigate(route.name)}
-              style={[
-                styles.tabWrap,
-                focused
-                  ? styles.tabActive
-                  : { backgroundColor: AdminColors.secondary },
-                { marginHorizontal: 8 },
-              ]}
-              activeOpacity={0.9}
-            >
-              <IconSymbol
-                size={route.name === "customize-tables" ? 20 : 18}
-                name={icon}
-                color={focused ? AdminColors.card : AdminColors.text}
-              />
-              <Text
+            return (
+              <TouchableOpacity
+                key={route.key}
+                onPress={() => navigation.navigate(route.name)}
                 style={[
-                  { color: focused ? AdminColors.card : AdminColors.text },
-                  styles.tabText,
+                  styles.tabWrap,
+                  focused
+                    ? styles.tabActive
+                    : { backgroundColor: AdminColors.secondary },
+                  { marginHorizontal: 8 },
                 ]}
+                activeOpacity={0.9}
               >
-                {label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <IconSymbol
+                  size={route.name === "customize-tables" ? 20 : 18}
+                  name={icon}
+                  color={focused ? AdminColors.card : AdminColors.text}
+                />
+                <Text
+                  style={[
+                    { color: focused ? AdminColors.card : AdminColors.text },
+                    styles.tabText,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
       </ScrollView>
     </View>
   );
@@ -97,20 +102,61 @@ function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
 export default function AdminTabLayout() {
   useColorScheme();
+  const router = useRouter();
+  const [checkedAuth, setCheckedAuth] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const user = await AsyncStorage.getItem("user");
+        const token = await AsyncStorage.getItem("qrave_jwt");
+        if (!user && !token) {
+          // no stored auth — redirect to login (app/index.js is the login route)
+          router.replace("/");
+          return;
+        }
+      } catch (e) {
+        console.warn("Auth check failed", e);
+      } finally {
+        if (mounted) setCheckedAuth(true);
+      }
+    };
+    check();
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  if (!checkedAuth) return null;
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarShowLabel: false,
-        tabBarButton: HapticTab,
-      }}
-      tabBar={(props) => <AdminTabBar {...props} />}
-    >
-      <Tabs.Screen name="customize-tables" options={{ title: "Customize" }} />
-      <Tabs.Screen name="inventory" options={{ title: "Inventory" }} />
-      <Tabs.Screen name="staff" options={{ title: "Staff" }} />
-      <Tabs.Screen name="billing" options={{ title: "Billing" }} />
-    </Tabs>
+    <View style={{ flex: 1, backgroundColor: AdminColors.background }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: 12,
+          paddingBottom: 0,
+        }}
+      >
+        <AdminButton style={{}} />
+        <LogoutButton />
+      </View>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: false,
+          tabBarButton: HapticTab,
+        }}
+        tabBar={(props) => <AdminTabBar {...props} />}
+      >
+        <Tabs.Screen name="customize-tables" options={{ title: "Customize" }} />
+        <Tabs.Screen name="inventory" options={{ title: "Inventory" }} />
+        <Tabs.Screen name="staff" options={{ title: "Staff" }} />
+        <Tabs.Screen name="billing" options={{ title: "Billing" }} />
+        {/* Profile tab removed as requested */}
+      </Tabs>
+    </View>
   );
 }

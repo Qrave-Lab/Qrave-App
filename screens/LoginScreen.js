@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { login as apiLogin, getDebug } from "../lib/apiClient";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -8,25 +9,30 @@ export default function LoginScreen({ navigation }) {
 
   const doLogin = async () => {
     if (!email || !password) return Alert.alert("Enter email and password");
-    // temporary hardcoded admin credentials
-    if (email === 'admin' && password === 'admin') {
-      const adminUser = { name: 'Administrator', email: 'admin' };
-      try {
-        await AsyncStorage.setItem('user', JSON.stringify(adminUser));
-      } catch (e) {
-        console.warn('Failed to save user', e);
-      }
-      return navigation.replace('Admin', { user: adminUser });
-    }
-
-    const mockUser = { name: "Hotel Admin", email };
+    setLoading(true);
     try {
-      await AsyncStorage.setItem("user", JSON.stringify(mockUser));
-    } catch (e) {
-      console.warn("Failed to save user", e);
+      const data = await apiLogin(email, password);
+      const user = data.user || data;
+      if (!user) {
+        throw new Error('Invalid credentials');
+      }
+      try {
+        await AsyncStorage.setItem("user", JSON.stringify(user));
+      } catch (e) {
+        console.warn("Failed to save user", e);
+      }
+
+      const isAdmin = (user && (user.role === 'owner' || user.role === 'manager')) || false;
+      navigation.replace(isAdmin ? 'Admin' : 'Dashboard', { user });
+    } catch (err) {
+      const msg = err?.body?.message || err.message || 'Login failed';
+      Alert.alert('Login failed', String(msg));
+    } finally {
+      setLoading(false);
     }
-    navigation.replace("Dashboard", { user: mockUser });
   };
+
+  const [loading, setLoading] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -49,11 +55,27 @@ export default function LoginScreen({ navigation }) {
         secureTextEntry
       />
 
-      <TouchableOpacity style={styles.button} onPress={doLogin}>
-        <Text style={styles.buttonText}>Sign In</Text>
+      <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={doLogin} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
       </TouchableOpacity>
 
-      <Text style={styles.note}>This is a mocked login for frontend demo.</Text>
+      <Text style={styles.note}>Sign in with your registered admin credentials.</Text>
+      <TouchableOpacity style={[styles.debugButton]} onPress={async () => {
+        try {
+          const loginError = await getDebug('login_error');
+          const loginSuccess = await getDebug('login_success');
+          const profile = await getDebug('profile');
+          console.log('debug_login_error', loginError);
+          console.log('debug_login_success', loginSuccess);
+          console.log('debug_profile', profile);
+          Alert.alert('Debug dumped to console');
+        } catch (e) {
+          console.warn('Failed to read debug', e);
+          Alert.alert('Failed to read debug');
+        }
+      }}>
+        <Text style={styles.debugText}>Show Debug</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -63,6 +85,9 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, marginBottom: 20, fontWeight: "700" },
   input: { width: "100%", padding: 12, borderWidth: 1, borderColor: "#ddd", borderRadius: 8, marginBottom: 12, backgroundColor: "#fff" },
   button: { backgroundColor: "#0a84ff", padding: 12, borderRadius: 8, width: "100%", alignItems: "center" },
+  buttonDisabled: { opacity: 0.7 },
   buttonText: { color: "#fff", fontWeight: "600" },
   note: { marginTop: 12, color: "#666" },
+  debugButton: { marginTop: 12, padding: 8 },
+  debugText: { color: '#666' },
 });

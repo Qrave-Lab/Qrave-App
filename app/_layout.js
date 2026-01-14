@@ -27,7 +27,7 @@ export default function Layout() {
   return (
     <NotificationProvider>
       {/* Stack from expo-router will render child routes */}
-      <Stack screenOptions={{ headerShown: true }} />
+      <Stack screenOptions={{ headerShown: false }} />
     </NotificationProvider>
   );
 }

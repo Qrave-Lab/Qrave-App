@@ -1,40 +1,46 @@
 // app/index.js
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { login as apiLogin } from "../lib/apiClient";
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const doLogin = async () => {
-    if (!email || !password) return Alert.alert("Enter email and password");
-    // temporary admin credentials
-    if (email === 'admin' && password === 'admin') {
-      const adminUser = { name: 'Administrator', email: 'admin' };
-      try {
-        await AsyncStorage.setItem('user', JSON.stringify(adminUser));
-      } catch (e) {
-        console.warn('Failed to save user', e);
-      }
-      return router.replace('/admin');
+    if (!email || !password) {
+      setError("Enter email and password");
+      return;
     }
-
-    const mockUser = { name: "Hotel Admin", email };
+    setLoading(true);
+    setError("");
     try {
-      await AsyncStorage.setItem("user", JSON.stringify(mockUser));
-    } catch (e) {
-      console.warn("Failed to save user", e);
+      const data = await apiLogin(email, password);
+      const user = data.user || data;
+      if (!user) throw new Error('Invalid credentials');
+      try {
+        await AsyncStorage.setItem("user", JSON.stringify(user));
+      } catch (e) {
+        console.warn("Failed to save user", e);
+      }
+      // navigate to admin if admin, else dashboard
+      const isAdmin = user && (user.role === 'owner' || user.role === 'manager');
+      router.replace(isAdmin ? '/admin' : '/dashboard');
+    } catch (err) {
+      const msg = err?.body?.message || err.message || 'Login failed';
+      setError(String(msg));
+    } finally {
+      setLoading(false);
     }
-    // navigate to dashboard
-    router.replace("/dashboard");
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Admin Login</Text>
+     <View style={styles.container}>
 
       <TextInput
         placeholder="Email"
@@ -53,11 +59,12 @@ export default function LoginScreen() {
         secureTextEntry
       />
 
-      <TouchableOpacity style={styles.button} onPress={doLogin}>
-        <Text style={styles.buttonText}>Sign In</Text>
+      <TouchableOpacity style={[styles.button, loading && { opacity: 0.7 }]} onPress={doLogin} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
       </TouchableOpacity>
 
-      <Text style={styles.note}>This is a mocked login for frontend demo.</Text>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Text style={styles.note}>Sign in with your registered admin credentials.</Text>
     </View>
   );
 }
@@ -69,4 +76,5 @@ const styles = StyleSheet.create({
   button: { backgroundColor: "#0a84ff", padding: 12, borderRadius: 8, width: "100%", alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "600" },
   note: { marginTop: 12, color: "#666" },
+  error: { color: '#c00', marginTop: 10, marginBottom: 0, fontWeight: '600' },
 });

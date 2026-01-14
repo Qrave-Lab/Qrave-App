@@ -1,75 +1,71 @@
-// app/index.js
+// app/forgot-password.js
 import React, { useState } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   Animated,
   Dimensions,
   ActivityIndicator,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { login as apiLogin } from "../lib/apiClient";   // ← keeping your real API call
+import { sendResetOtp } from "../lib/apiClient";
 
 const { width } = Dimensions.get("window");
 
-export default function LoginScreen() {
+export default function ForgotPasswordScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [focusedInput, setFocusedInput] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const slideAnim = React.useRef(new Animated.Value(50)).current;
 
   React.useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 20,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 700,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
-  const doLogin = async () => {
-    if (!email || !password) {
-      setError("Please enter email and password");
+  const handleSendOtp = async () => {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setError("Please enter your email address");
+      return;
+    }
+
+    if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+      setError("Please enter a valid email address");
       return;
     }
 
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
-      const data = await apiLogin(email, password);
-      const user = data.user || data;
+      await sendResetOtp(trimmedEmail);
 
-      if (!user) throw new Error("Invalid credentials");
+      setSuccess("OTP has been sent to your email");
 
-      try {
-        await AsyncStorage.setItem("user", JSON.stringify(user));
-      } catch (e) {
-        console.warn("Failed to save user to AsyncStorage", e);
-      }
-
-      const isAdmin = user && (user.role === "owner" || user.role === "manager");
-      router.replace(isAdmin ? "/admin" : "/dashboard");
+      // Wait a moment to show success message, then navigate
+      setTimeout(() => {
+        router.push({
+          pathname: "/verify-otp",
+          params: { email: trimmedEmail },
+        });
+      }, 1800);
     } catch (err) {
-      const msg = err?.body?.message || err.message || "Login failed";
-      setError(String(msg));
+      const errorMessage =
+        err.message ||
+        "Failed to send OTP. Please check your email and try again.";
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -81,15 +77,7 @@ export default function LoginScreen() {
       <View style={styles.gradientTop} />
       <View style={styles.gradientBottom} />
 
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
+      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
         {/* Logo / Branding */}
         <View style={styles.logoContainer}>
           <View style={styles.logoCircle}>
@@ -99,12 +87,15 @@ export default function LoginScreen() {
           <Text style={styles.tagline}>Scan. Order. Savor.</Text>
         </View>
 
-        {/* Main login card */}
+        {/* Main card */}
         <View style={styles.card}>
-          <Text style={styles.welcomeText}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to manage your restaurant</Text>
+          <Text style={styles.welcomeText}>Reset Password</Text>
+          <Text style={styles.subtitle}>
+            Enter your email to receive a one-time password (OTP)
+          </Text>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {success ? <Text style={styles.successText}>{success}</Text> : null}
 
           {/* Email Input */}
           <View style={styles.inputContainer}>
@@ -112,75 +103,46 @@ export default function LoginScreen() {
               <Text style={styles.iconText}>✉</Text>
             </View>
             <TextInput
-              placeholder="Email or Username"
+              placeholder="Your email address"
               placeholderTextColor="#94a3b8"
               value={email}
-              onChangeText={setEmail}
-              onFocus={() => setFocusedInput("email")}
-              onBlur={() => setFocusedInput(null)}
-              style={[
-                styles.input,
-                focusedInput === "email" && styles.inputFocused,
-              ]}
+              onChangeText={(text) => {
+                setEmail(text);
+                setError(""); // clear error on typing
+              }}
+              style={styles.input}
               autoCapitalize="none"
               keyboardType="email-address"
               editable={!loading}
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={handleSendOtp}
             />
           </View>
 
-          {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputIcon}>
-              <Text style={styles.iconText}>🔒</Text>
-            </View>
-            <TextInput
-              placeholder="Password"
-              placeholderTextColor="#94a3b8"
-              value={password}
-              onChangeText={setPassword}
-              onFocus={() => setFocusedInput("password")}
-              onBlur={() => setFocusedInput(null)}
-              style={[
-                styles.input,
-                focusedInput === "password" && styles.inputFocused,
-              ]}
-              secureTextEntry
-              editable={!loading}
-            />
-          </View>
-
-          {/* Forgot Password */}
-          <TouchableOpacity style={styles.forgotPassword} disabled={loading}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </TouchableOpacity>
-
-          {/* Login Button */}
+          {/* Send OTP Button */}
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={doLogin}
+            onPress={handleSendOtp}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
+              <Text style={styles.buttonText}>Send OTP</Text>
             )}
           </TouchableOpacity>
 
-          {/* Register link */}
+          {/* Back to login */}
           <TouchableOpacity
-            style={styles.registerLink}
-            onPress={() => router.push("/register")}
+            style={styles.backLink}
+            onPress={() => router.back()}
             disabled={loading}
           >
-            <Text style={styles.registerLinkText}>
-              Don't have an account?{" "}
-              <Text style={styles.registerLinkBold}>Register Now</Text>
-            </Text>
+            <Text style={styles.backLinkText}>Back to Sign In</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Footer */}
         <Text style={styles.footer}>
           Powered by Qrave • QR Food Ordering System
         </Text>
@@ -284,13 +246,14 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     color: "#ffffff",
-    marginBottom: 4,
+    marginBottom: 8,
   },
 
   subtitle: {
     fontSize: 15,
     color: "#94a3b8",
-    marginBottom: 20,
+    marginBottom: 24,
+    textAlign: "center",
   },
 
   errorText: {
@@ -301,10 +264,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  successText: {
+    color: "#6ee7b7",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 24,
     position: "relative",
   },
 
@@ -334,22 +305,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
 
-  inputFocused: {
-    borderColor: "#ef4444",
-    backgroundColor: "#1a1f2e",
-  },
-
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginBottom: 24,
-  },
-
-  forgotText: {
-    color: "#ef4444",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
   button: {
     backgroundColor: "#ef4444",
     padding: 18,
@@ -360,8 +315,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 6,
-    flexDirection: "row",
-    justifyContent: "center",
   },
 
   buttonDisabled: {
@@ -377,20 +330,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
-  registerLink: {
-    marginTop: 20,
+  backLink: {
+    marginTop: 24,
     alignItems: "center",
   },
 
-  registerLinkText: {
+  backLinkText: {
     color: "#94a3b8",
     fontSize: 14,
-    textAlign: "center",
-  },
-
-  registerLinkBold: {
-    color: "#ef4444",
-    fontWeight: "700",
   },
 
   footer: {

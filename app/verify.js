@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
 
 const { width, height } = Dimensions.get("window");
@@ -18,12 +18,31 @@ const THEME_COLOR = "#F4B400";
 const THEME_DARK = "#E5A800";
 const BASE_URL = "https://qrave-backend.onrender.com";
 
-export default function ForgotPasswordScreen() {
+export default function VerifyScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const { email } = useLocalSearchParams();
+  const [code, setCode] = useState(["", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(null);
   const [error, setError] = useState("");
+  const inputRefs = useRef([]);
   const buttonScale = useRef(new Animated.Value(1)).current;
+
+  const handleChange = (text, index) => {
+    const newCode = [...code];
+    newCode[index] = text.replace(/[^0-9]/g, "").slice(0, 1);
+    setCode(newCode);
+    setError("");
+    if (text && index < 3) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyPress = (e, index) => {
+    if (e.nativeEvent.key === "Backspace" && !code[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
 
   const handlePressIn = () => {
     Animated.spring(buttonScale, {
@@ -41,34 +60,46 @@ export default function ForgotPasswordScreen() {
     }).start();
   };
 
-  const handleSendOtp = async () => {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      setError("Please enter your email");
+  const handleVerify = async () => {
+    if (!email) {
+      setError("Missing email");
       return;
     }
-    if (!trimmedEmail.includes("@")) {
-      setError("Enter a valid email");
+    if (code.some((d) => !d)) {
+      setError("Enter the 4-digit code");
       return;
     }
 
     setIsLoading(true);
     setError("");
     try {
-      const res = await fetch(`${BASE_URL}/public/otp/request`, {
+      const res = await fetch(`${BASE_URL}/public/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail }),
+        body: JSON.stringify({ email, code: code.join("") }),
       });
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Failed to send code");
+        const body = await res.text();
+        throw new Error(body || "Invalid code");
       }
-      router.push({ pathname: "/forgot-otp", params: { email: trimmedEmail } });
+      router.push("/setup");
     } catch (err) {
-      setError(err?.message || "Failed to send code");
+      setError(err?.message || "Verification failed");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) return;
+    try {
+      await fetch(`${BASE_URL}/public/otp/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch (err) {
+      setError(err?.message || "Failed to resend");
     }
   };
 
@@ -76,9 +107,9 @@ export default function ForgotPasswordScreen() {
     <View style={styles.container}>
       <View style={styles.headerBackground}>
         <Svg
-          height={height * 0.36}
+          height={height * 0.38}
           width={width}
-          viewBox={`0 0 ${width} ${height * 0.36}`}
+          viewBox={`0 0 ${width} ${height * 0.38}`}
           style={styles.headerSvg}
         >
           <Defs>
@@ -88,22 +119,24 @@ export default function ForgotPasswordScreen() {
             </LinearGradient>
           </Defs>
           <Path
-            d={`M0 0 L${width} 0 L${width} ${height * 0.22} L0 ${height * 0.32} Z`}
+            d={`M0 0 L${width} 0 L${width} ${height * 0.25}
+              C${width * 0.75} ${height * 0.32}, ${width * 0.5} ${height * 0.22}, ${width * 0.25} ${height * 0.30}
+              C0 ${height * 0.36}, 0 ${height * 0.28}, 0 ${height * 0.25} Z`}
             fill="url(#headerGradient)"
           />
           <Path
-            d={`M${width * 0.7} 0 L${width} 0 L${width} ${height * 0.08} Z`}
-            fill="rgba(255,255,255,0.1)"
-          />
-          <Path
-            d={`M${width * 0.85} 0 L${width} 0 L${width} ${height * 0.04} Z`}
-            fill="rgba(255,255,255,0.08)"
+            d={`M0 ${height * 0.20}
+              Q${width * 0.25} ${height * 0.15}, ${width * 0.5} ${height * 0.22}
+              Q${width * 0.75} ${height * 0.28}, ${width} ${height * 0.18}`}
+            stroke="rgba(255,255,255,0.2)"
+            strokeWidth={2}
+            fill="none"
           />
         </Svg>
 
         <SafeAreaView style={styles.logoContainer}>
           <Text style={styles.logoText}>QRAVE</Text>
-          <Text style={styles.tagline}>Reset your password</Text>
+          <Text style={styles.tagline}>Verify your email</Text>
         </SafeAreaView>
       </View>
 
@@ -128,45 +161,58 @@ export default function ForgotPasswordScreen() {
             </Svg>
           </View>
 
-          <Text style={styles.title}>Enter your email</Text>
+          <Text style={styles.title}>Enter Verification Code</Text>
           <Text style={styles.subtitle}>
-            We'll send a 4-digit code to reset your password
+            We've sent a 4-digit code to your email address
           </Text>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Email address"
-              placeholderTextColor="#9CA3AF"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!isLoading}
-            />
+          <View style={styles.otpContainer}>
+            {code.map((digit, i) => (
+              <TextInput
+                key={i}
+                ref={(ref) => {
+                  inputRefs.current[i] = ref;
+                }}
+                style={[
+                  styles.otpBox,
+                  focusedIndex === i && styles.otpBoxFocused,
+                  digit && styles.otpBoxFilled,
+                ]}
+                maxLength={1}
+                keyboardType="number-pad"
+                value={digit}
+                onChangeText={(t) => handleChange(t, i)}
+                onKeyPress={(e) => handleKeyPress(e, i)}
+                onFocus={() => setFocusedIndex(i)}
+                onBlur={() => setFocusedIndex(null)}
+              />
+            ))}
+          </View>
+
+          <View style={styles.resendContainer}>
+            <Text style={styles.resendText}>Didn't receive code? </Text>
+            <Pressable onPress={handleResend}>
+              <Text style={styles.resendLink}>Resend</Text>
+            </Pressable>
           </View>
 
           <Animated.View style={{ transform: [{ scale: buttonScale }], width: "100%" }}>
             <Pressable
-              style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-              onPress={handleSendOtp}
+              style={[styles.verifyButton, isLoading && styles.buttonDisabled]}
+              onPress={handleVerify}
               onPressIn={handlePressIn}
               onPressOut={handlePressOut}
-              disabled={isLoading}
+              disabled={isLoading || code.some((d) => !d)}
             >
               {isLoading ? (
                 <ActivityIndicator color="#111827" />
               ) : (
-                <Text style={styles.primaryButtonText}>Send Code</Text>
+                <Text style={styles.verifyButtonText}>Verify Email</Text>
               )}
             </Pressable>
           </Animated.View>
-
-          <Pressable style={styles.backLink} onPress={() => router.back()}>
-            <Text style={styles.backLinkText}>← Back to Login</Text>
-          </Pressable>
         </View>
       </View>
     </View>
@@ -244,32 +290,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B7280",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 16,
     lineHeight: 20,
   },
   errorText: {
     color: "#DC2626",
     fontSize: 12,
     fontWeight: "600",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  inputContainer: {
-    width: "100%",
-    backgroundColor: "#F5F6F8",
+  otpContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  otpBox: {
+    width: 56,
+    height: 56,
     borderRadius: 14,
+    backgroundColor: "#F5F6F8",
     borderWidth: 2,
     borderColor: "transparent",
-    paddingHorizontal: 16,
-    height: 54,
-    marginBottom: 18,
-  },
-  input: {
-    flex: 1,
-    fontSize: 14,
+    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#111827",
-    height: "100%",
   },
-  primaryButton: {
+  otpBoxFocused: {
+    borderColor: THEME_COLOR,
+    backgroundColor: "#FFFEF8",
+  },
+  otpBoxFilled: {
+    backgroundColor: "#FFF9E6",
+    borderColor: THEME_COLOR,
+  },
+  resendContainer: {
+    flexDirection: "row",
+    marginBottom: 24,
+  },
+  resendText: {
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  resendLink: {
+    fontSize: 13,
+    color: THEME_COLOR,
+    fontWeight: "600",
+  },
+  verifyButton: {
     height: 54,
     backgroundColor: THEME_COLOR,
     borderRadius: 14,
@@ -285,16 +354,9 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
-  primaryButtonText: {
+  verifyButtonText: {
     fontSize: 14,
     fontWeight: "700",
     color: "#111827",
-  },
-  backLink: {
-    marginTop: 20,
-  },
-  backLinkText: {
-    fontSize: 13,
-    color: "#6B7280",
   },
 });

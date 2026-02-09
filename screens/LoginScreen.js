@@ -22,8 +22,10 @@ export default function LoginScreen({ navigation }) {
         console.warn("Failed to save user", e);
       }
 
-      const isAdmin = (user && (user.role === 'owner' || user.role === 'manager')) || false;
-      navigation.replace(isAdmin ? 'Admin' : 'Dashboard', { user });
+      const role = user?.role;
+      const isAdmin = role === "owner" || role === "manager";
+      const isWaiter = role === "waiter";
+      navigation.replace(isAdmin ? "Admin" : isWaiter ? "Waiter" : "Dashboard", { user });
     } catch (err) {
       const msg = err?.body?.message || err.message || 'Login failed';
       Alert.alert('Login failed', String(msg));

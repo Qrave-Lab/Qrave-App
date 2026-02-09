@@ -36,6 +36,15 @@ export const AdminColors = {
   text: '#1a1226',
 };
 
+export const WaiterColors = {
+  primary: '#0F766E',
+  secondary: '#14B8A6',
+  accent: '#2DD4BF',
+  background: '#F0FDFA',
+  card: '#FFFFFF',
+  text: '#0F172A',
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

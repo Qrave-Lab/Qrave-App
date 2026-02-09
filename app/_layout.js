@@ -4,9 +4,13 @@ import { Stack } from "expo-router";
 import { NotificationProvider } from "../contexts/NotificationContext";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 
 export default function Layout() {
   useEffect(() => {
+    if (Constants.appOwnership === "expo") {
+      return;
+    }
     // show notifications while foregrounded
     Notifications.setNotificationHandler({
       handleNotification: async () => ({

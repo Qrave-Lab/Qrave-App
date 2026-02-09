@@ -1,402 +1,326 @@
 // app/index.js
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
   StyleSheet,
-  Animated,
+  Pressable,
   Dimensions,
-  ActivityIndicator,
+  FlatList,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { login as apiLogin } from "../lib/apiClient";   // ← keeping your real API call
+import { BrushBackground } from "../components/ui/BrushBackground";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
-export default function LoginScreen() {
+const Colors = {
+  primary: "#FFC220",
+  black: "#000000",
+  white: "#FFFFFF",
+  backgroundSplash: "#FFC220",
+  textPrimary: "#000000",
+  textMuted: "#BDBDBD",
+  buttonPrimary: "#000000",
+};
+
+const Spacing = {
+  sm: 8,
+  md: 12,
+  lg: 20,
+  xl: 32,
+};
+
+const Typography = {
+  xs: 12,
+  sm: 13,
+  base: 15,
+  lg: 17,
+  xl: 20,
+  "2xl": 24,
+  "3xl": 28,
+  "4xl": 34,
+};
+
+const BorderRadius = {
+  sm: 8,
+};
+
+const slides = [
+  {
+    id: "1",
+    lines: ["Bringing", "Happiness with", "delicious food is", "our goal."],
+    description: "",
+  },
+  {
+    id: "2",
+    lines: ["Scan &", "Explore"],
+    description:
+      "Simply scan the QR code at your table to instantly access the complete menu on your device",
+  },
+  {
+    id: "3",
+    lines: ["Browse", "Menus"],
+    description:
+      "Discover detailed dish descriptions, prices, and beautiful photos to make the perfect choice",
+  },
+];
+
+const WAVE_START_PERCENT = 0.55;
+const PLATE_SIZE = width * 0.65;
+
+export default function SplashScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [focusedInput, setFocusedInput] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const flatListRef = useRef(null);
 
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const slideAnim = React.useRef(new Animated.Value(50)).current;
-
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 20,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  const doLogin = async () => {
-    if (!email || !password) {
-      setError("Please enter email and password");
-      return;
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems.length > 0 && viewableItems[0].index !== null) {
+      setCurrentIndex(viewableItems[0].index);
     }
+  }).current;
 
-    setLoading(true);
-    setError("");
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
 
-    try {
-      const data = await apiLogin(email, password);
-      const user = data.user || data;
-
-      if (!user) throw new Error("Invalid credentials");
-
-      try {
-        await AsyncStorage.setItem("user", JSON.stringify(user));
-      } catch (e) {
-        console.warn("Failed to save user to AsyncStorage", e);
-      }
-
-      const isAdmin = user && (user.role === "owner" || user.role === "manager");
-      router.replace(isAdmin ? "/admin" : "/dashboard");
-    } catch (err) {
-      const msg = err?.body?.message || err.message || "Login failed";
-      setError(String(msg));
-    } finally {
-      setLoading(false);
+  const handleNext = () => {
+    if (currentIndex < slides.length - 1) {
+      flatListRef.current?.scrollToIndex({
+        index: currentIndex + 1,
+        animated: true,
+      });
+    } else {
+      router.push("/login");
     }
   };
 
-  return (
-    <View style={styles.screen}>
-      {/* Background gradient blobs */}
-      <View style={styles.gradientTop} />
-      <View style={styles.gradientBottom} />
+  const handlePrevious = () => {
+    if (currentIndex > 0) {
+      flatListRef.current?.scrollToIndex({
+        index: currentIndex - 1,
+        animated: true,
+      });
+    }
+  };
 
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        {/* Logo / Branding */}
-        <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>Q</Text>
-          </View>
-          <Text style={styles.appName}>Qrave</Text>
-          <Text style={styles.tagline}>Scan. Order. Savor.</Text>
+  const renderSlide = ({ item }) => (
+    <View style={styles.slide}>
+      <SafeAreaView style={styles.topSection}>
+        <View style={styles.topBar}>
+          <Text style={styles.brandName}>QRAVE</Text>
         </View>
 
-        {/* Main login card */}
-        <View style={styles.card}>
-          <Text style={styles.welcomeText}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to manage your restaurant</Text>
-
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          {/* Email Input */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputIcon}>
-              <Text style={styles.iconText}>✉</Text>
-            </View>
-            <TextInput
-              placeholder="Email or Username"
-              placeholderTextColor="#94a3b8"
-              value={email}
-              onChangeText={setEmail}
-              onFocus={() => setFocusedInput("email")}
-              onBlur={() => setFocusedInput(null)}
-              style={[
-                styles.input,
-                focusedInput === "email" && styles.inputFocused,
-              ]}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-            />
-          </View>
-
-          {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputIcon}>
-              <Text style={styles.iconText}>🔒</Text>
-            </View>
-            <TextInput
-              placeholder="Password"
-              placeholderTextColor="#94a3b8"
-              value={password}
-              onChangeText={setPassword}
-              onFocus={() => setFocusedInput("password")}
-              onBlur={() => setFocusedInput(null)}
-              style={[
-                styles.input,
-                focusedInput === "password" && styles.inputFocused,
-              ]}
-              secureTextEntry
-              editable={!loading}
-            />
-          </View>
-
-          {/* Forgot Password */}
-          <TouchableOpacity style={styles.forgotPassword} disabled={loading}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </TouchableOpacity>
-
-          {/* Login Button */}
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={doLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Register link */}
-          <TouchableOpacity
-            style={styles.registerLink}
-            onPress={() => router.push("/register")}
-            disabled={loading}
-          >
-            <Text style={styles.registerLinkText}>
-              Don't have an account?{" "}
-              <Text style={styles.registerLinkBold}>Register Now</Text>
+        <View style={styles.textContainer}>
+          {item.lines.map((line, lineIndex) => (
+            <Text key={lineIndex} style={styles.title}>
+              {line}
             </Text>
-          </TouchableOpacity>
+          ))}
+
+          {item.description ? (
+            <Text style={styles.description}>{item.description}</Text>
+          ) : null}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <BrushBackground />
+
+      <FlatList
+        ref={flatListRef}
+        data={slides}
+        renderItem={renderSlide}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        style={styles.flatList}
+      />
+
+      <View style={styles.heroImageWrapper}>
+        <Image
+          source={require("../assets/images/splash-hero.png")}
+          style={styles.heroImage}
+          contentFit="contain"
+        />
+      </View>
+
+      <SafeAreaView edges={["bottom"]} style={styles.bottomSection}>
+        <View style={styles.indicatorContainer}>
+          {slides.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.indicator,
+                currentIndex === index && styles.indicatorActive,
+              ]}
+            />
+          ))}
         </View>
 
-        {/* Footer */}
-        <Text style={styles.footer}>
-          Powered by Qrave • QR Food Ordering System
-        </Text>
-      </Animated.View>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={() => router.push("/login")}
+        >
+          <Text style={styles.primaryButtonText}>Phone number or email</Text>
+        </Pressable>
+
+        <View style={styles.navRow}>
+          {currentIndex > 0 ? (
+            <Pressable style={styles.navButton} onPress={handlePrevious}>
+              <Text style={styles.prevText}>{"<- Previous"}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.navButton} />
+          )}
+
+          <Pressable style={styles.navButton} onPress={handleNext}>
+            <Text style={styles.nextText}>
+              {currentIndex === slides.length - 1
+                ? "Get Started ->"
+                : "Next ->"}
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-  },
-
-  gradientTop: {
-    position: "absolute",
-    top: -100,
-    left: -100,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "#ef4444",
-    opacity: 0.15,
-  },
-
-  gradientBottom: {
-    position: "absolute",
-    bottom: -150,
-    right: -100,
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-    backgroundColor: "#f59e0b",
-    opacity: 0.1,
-  },
-
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
+    backgroundColor: Colors.backgroundSplash,
   },
-
-  logoContainer: {
-    alignItems: "center",
-    marginBottom: 40,
-  },
-
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#ef4444",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-    shadowColor: "#ef4444",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-
-  logoText: {
-    fontSize: 42,
-    fontWeight: "900",
-    color: "#ffffff",
-  },
-
-  appName: {
-    fontSize: 36,
-    fontWeight: "900",
-    color: "#ffffff",
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-
-  tagline: {
-    fontSize: 14,
-    color: "#94a3b8",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-  },
-
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    backgroundColor: "#1e293b",
-    borderRadius: 24,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: "#334155",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.3,
-    shadowRadius: 30,
-    elevation: 10,
-  },
-
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#ffffff",
-    marginBottom: 4,
-  },
-
-  subtitle: {
-    fontSize: 15,
-    color: "#94a3b8",
-    marginBottom: 20,
-  },
-
-  errorText: {
-    color: "#fca5a5",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    position: "relative",
-  },
-
-  inputIcon: {
+  flatList: {
     position: "absolute",
-    left: 16,
-    zIndex: 1,
-    width: 24,
-    height: 24,
-    justifyContent: "center",
-    alignItems: "center",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: height * 0.45,
+    zIndex: 10,
   },
-
-  iconText: {
-    fontSize: 18,
+  slide: {
+    width: width,
   },
-
-  input: {
+  topSection: {
     flex: 1,
-    backgroundColor: "#0f172a",
-    borderWidth: 2,
-    borderColor: "#334155",
-    borderRadius: 12,
-    padding: 16,
-    paddingLeft: 52,
-    fontSize: 16,
-    color: "#ffffff",
   },
-
-  inputFocused: {
-    borderColor: "#ef4444",
-    backgroundColor: "#1a1f2e",
-  },
-
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginBottom: 24,
-  },
-
-  forgotText: {
-    color: "#ef4444",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  button: {
-    backgroundColor: "#ef4444",
-    padding: 18,
-    borderRadius: 12,
+  topBar: {
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     alignItems: "center",
-    shadowColor: "#ef4444",
-    shadowOffset: { width: 0, height: 8 },
+  },
+  brandName: {
+    fontSize: Typography["4xl"],
+    fontWeight: "800",
+    color: Colors.textPrimary,
+    letterSpacing: 2,
+  },
+  textContainer: {
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+  },
+  title: {
+    fontSize: Typography["3xl"],
+    fontWeight: "800",
+    color: Colors.textPrimary,
+    lineHeight: Typography["3xl"] * 1.3,
+  },
+  description: {
+    fontSize: Typography.xl,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+    lineHeight: Typography.xl * 1.4,
+    marginTop: Spacing.md,
+  },
+  heroImageWrapper: {
+    position: "absolute",
+    top: height * WAVE_START_PERCENT - PLATE_SIZE / 2,
+    left: (width - PLATE_SIZE) / 2,
+    width: PLATE_SIZE,
+    height: PLATE_SIZE,
+    zIndex: 5,
+  },
+  heroImage: {
+    width: "100%",
+    height: "100%",
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 15 },
     shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  bottomSection: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    alignItems: "center",
+    zIndex: 1,
+  },
+  indicatorContainer: {
     flexDirection: "row",
     justifyContent: "center",
-  },
-
-  buttonDisabled: {
-    backgroundColor: "#475569",
-    shadowOpacity: 0,
-  },
-
-  buttonText: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-
-  registerLink: {
-    marginTop: 20,
     alignItems: "center",
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
   },
-
-  registerLinkText: {
-    color: "#94a3b8",
-    fontSize: 14,
-    textAlign: "center",
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.textMuted,
   },
-
-  registerLinkBold: {
-    color: "#ef4444",
-    fontWeight: "700",
+  indicatorActive: {
+    width: 24,
+    backgroundColor: Colors.primary,
   },
-
-  footer: {
-    marginTop: 32,
-    color: "#475569",
-    fontSize: 13,
-    textAlign: "center",
+  primaryButton: {
+    backgroundColor: Colors.buttonPrimary,
+    paddingVertical: Spacing.md + 4,
+    paddingHorizontal: Spacing.xl * 1.5,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 300,
+  },
+  primaryButtonText: {
+    color: Colors.white,
+    fontWeight: "600",
+    fontSize: Typography.base,
+  },
+  navRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  navButton: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    minWidth: 80,
+  },
+  prevText: {
+    color: Colors.textPrimary,
+    fontWeight: "500",
+    fontSize: Typography.base,
+  },
+  nextText: {
+    color: Colors.textPrimary,
+    fontWeight: "600",
+    fontSize: Typography.base,
+    textAlign: "right",
   },
 });

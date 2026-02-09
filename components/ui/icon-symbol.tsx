@@ -20,6 +20,10 @@ const MAPPING = {
   "bell.fill": "notifications",
   clock: "access-time",
   bag: "shopping-bag",
+  "arrow.right.arrow.left": "swap-horiz",
+  "arrow.triangle.branch": "merge-type",
+  "checkmark.circle": "check-circle",
+  "square.and.arrow.up": "exit-to-app",
 } as Record<string, string>;
 
 /**

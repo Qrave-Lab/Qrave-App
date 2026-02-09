@@ -36,6 +36,15 @@ export default function DashboardScreen() {
         if (!user) {
           router.replace("/");
         } else {
+          try {
+            const parsed = JSON.parse(user);
+            if (parsed?.role === "waiter") {
+              router.replace("/waiter");
+              return;
+            }
+          } catch (e) {
+            console.warn("Failed to parse user role", e);
+          }
           // Load orders if user is logged in
           const s = await AsyncStorage.getItem("orders");
           if (s) setOrders(JSON.parse(s));

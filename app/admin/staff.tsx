@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, FlatList, StyleSheet } from "react-native";
+import React, { useCallback, useState } from "react";
+import { View, Text, FlatList, StyleSheet, RefreshControl } from "react-native";
 import { AdminColors } from "../../constants/theme";
 
 const staff = [
@@ -9,12 +9,26 @@ const staff = [
 ];
 
 export default function Staff() {
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await new Promise((r) => setTimeout(r, 400));
+    setRefreshing(false);
+  }, []);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Staff Management</Text>
       <FlatList
         data={staff}
         keyExtractor={(i) => i.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={AdminColors.primary}
+          />
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View>

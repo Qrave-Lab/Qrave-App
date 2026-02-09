@@ -5,6 +5,11 @@ import { IconSymbol } from "../../components/ui/icon-symbol";
 import { AdminColors } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/use-color-scheme";
 import {
+  // ...existing code...
+  SafeAreaView,
+} from "react-native-safe-area-context";
+
+import {
   View,
   Text,
   StyleSheet,
@@ -40,8 +45,7 @@ function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const iconsMap: Record<string, string> = {
     "customize-tables": "table-restaurant",
     inventory: "inventory",
-    staff: "people",
-    billing: "receipt",
+    sales: "insights",
   };
 
   return (
@@ -59,7 +63,7 @@ function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         }}
       >
         {state.routes
-          .filter((route) => route.name !== "profile")
+          .filter((route) => route.name !== "profile" && route.name !== "qr-codes")
           .map((route, idx) => {
             const focused = state.index === idx;
             const label =
@@ -103,6 +107,7 @@ function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 export default function AdminTabLayout() {
   useColorScheme();
   const router = useRouter();
+  // ...existing code...
   const [checkedAuth, setCheckedAuth] = useState(false);
   useEffect(() => {
     let mounted = true;
@@ -114,6 +119,19 @@ export default function AdminTabLayout() {
           // no stored auth — redirect to login (app/index.js is the login route)
           router.replace("/");
           return;
+        }
+        if (user) {
+          try {
+            const parsed = JSON.parse(user);
+            const role = parsed?.role;
+            const isAdmin = role === "owner" || role === "manager";
+            if (!isAdmin) {
+              router.replace(role === "waiter" ? "/waiter" : "/dashboard");
+              return;
+            }
+          } catch (e) {
+            console.warn("Failed to parse user role", e);
+          }
         }
       } catch (e) {
         console.warn("Auth check failed", e);
@@ -130,33 +148,44 @@ export default function AdminTabLayout() {
   if (!checkedAuth) return null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: AdminColors.background }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: 12,
-          paddingBottom: 0,
-        }}
-      >
-        <AdminButton style={{}} />
-        <LogoutButton />
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: AdminColors.background }}
+      edges={["top", "left", "right"]}
+    >
+      <View style={{ flex: 1, backgroundColor: AdminColors.background }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: 12,
+            paddingBottom: 0,
+          }}
+        >
+          <AdminButton style={{}} />
+          <LogoutButton />
+        </View>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarShowLabel: false,
+            tabBarButton: HapticTab,
+          }}
+          tabBar={(props) => <AdminTabBar {...props} />}
+        >
+          <Tabs.Screen
+            name="customize-tables"
+            options={{ title: "Customize" }}
+          />
+          <Tabs.Screen name="inventory" options={{ title: "Inventory" }} />
+          <Tabs.Screen name="sales" options={{ title: "Sales" }} />
+          <Tabs.Screen
+            name="qr-codes"
+            options={{ href: null }}
+          />
+          {/* Profile tab removed as requested */}
+        </Tabs>
       </View>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarShowLabel: false,
-          tabBarButton: HapticTab,
-        }}
-        tabBar={(props) => <AdminTabBar {...props} />}
-      >
-        <Tabs.Screen name="customize-tables" options={{ title: "Customize" }} />
-        <Tabs.Screen name="inventory" options={{ title: "Inventory" }} />
-        <Tabs.Screen name="staff" options={{ title: "Staff" }} />
-        <Tabs.Screen name="billing" options={{ title: "Billing" }} />
-        {/* Profile tab removed as requested */}
-      </Tabs>
-    </View>
+    </SafeAreaView>
   );
 }

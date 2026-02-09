@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, FlatList, StyleSheet } from "react-native";
+import React, { useCallback, useState } from "react";
+import { View, Text, FlatList, StyleSheet, RefreshControl } from "react-native";
 import { AdminColors } from "../../constants/theme";
 
 const billing = [
@@ -10,6 +10,12 @@ const billing = [
 
 export default function Billing() {
   const total = billing.reduce((s, i) => s + i.qtySold * i.price, 0);
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await new Promise((r) => setTimeout(r, 400));
+    setRefreshing(false);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -17,6 +23,13 @@ export default function Billing() {
       <FlatList
         data={billing}
         keyExtractor={(i) => i.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={AdminColors.primary}
+          />
+        }
         renderItem={({ item }) => (
           <View style={styles.row}>
             <View style={{ flex: 1 }}>

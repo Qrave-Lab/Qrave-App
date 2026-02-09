@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,17 +7,20 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Switch,
+  Modal,
+  RefreshControl,
 } from "react-native";
+import { useRouter } from "expo-router";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api, { api as namedApi } from "../../lib/apiClient";
 
 // Placeholder images
 import iconPng from "../../assets/images/icon.png";
-import reactLogo from "../../assets/images/react-logo.png";
-import splashIcon from "../../assets/images/splash-icon.png";
 
 export default function AdminProfile() {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [restaurant, setRestaurant] = useState("");
@@ -26,26 +29,98 @@ export default function AdminProfile() {
   const [tax, setTax] = useState("");
   const [serviceCharge, setServiceCharge] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [tables, setTables] = useState<any[]>([]);
+  const [tablesLoading, setTablesLoading] = useState(false);
+  const [tablesError, setTablesError] = useState<string | null>(null);
+  const [staff, setStaff] = useState<any[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
+  const [addingStaff, setAddingStaff] = useState(false);
+  const [newStaff, setNewStaff] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "waiter",
+  });
+  const [editStaffOpen, setEditStaffOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState(false);
+  const [editStaffId, setEditStaffId] = useState<string | null>(null);
+  const [editStaff, setEditStaff] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "waiter",
+  });
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        // Always try to fetch from backend first
-        const profile = await api.get("/api/admin/me");
-        setUser(profile);
-        setRestaurant(profile.restaurant || "");
-        setAddress(profile.address || "");
-        setPhone(profile.phone || "");
-        setTax(profile.tax_percent ? String(profile.tax_percent) : "");
+  const resolveTableLabel = (t: any) =>
+    t?.table_number || t?.number || t?.name || t?.id || t?.tableID || "Table";
+
+  const resolveTableId = (t: any) => t?.id || t?.tableID || t?.table_id;
+
+  const resolveEnabled = (t: any) =>
+    t?.is_enabled !== undefined ? t.is_enabled : t?.enabled ?? t?.active ?? true;
+  const isArchived = (t: any) =>
+    t?.is_archived === true ||
+    t?.archived === true ||
+    t?.is_deleted === true ||
+    t?.deleted === true ||
+    t?.status === "archived" ||
+    t?.status === "deleted";
+
+  const resolveStaffId = (s: any) => s?.ID || s?.id || s?.user_id;
+  const resolveStaffEmail = (s: any) => s?.Email || s?.email || "";
+  const resolveStaffRole = (s: any) => s?.Role || s?.role || "staff";
+  const getStaffAvatar = (email: string) =>
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+      email || "user",
+    )}`;
+
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Always try to fetch from backend first
+      const profile = await api.get("/api/admin/me");
+      setUser(profile);
+      setRestaurant(profile.restaurant || "");
+      setAddress(profile.address || "");
+      setPhone(profile.phone || "");
+      setTax(profile.tax_percent ? String(profile.tax_percent) : "");
+      setServiceCharge(
+        profile.service_charge ? String(profile.service_charge) : ""
+      );
+      // Fetch logo URL if restaurant_id exists
+      if (profile.restaurant_id) {
+        try {
+          const res = await fetch(
+            `https://qrave-backend.onrender.com/public/restaurants/${profile.restaurant_id}/logo`
+          );
+          const data = await res.json();
+          if (data.logo_url) setLogoUrl(data.logo_url);
+        } catch (e) {
+          setLogoUrl(null);
+        }
+      } else {
+        setLogoUrl(null);
+      }
+    } catch (e) {
+      // fallback to AsyncStorage if backend fails
+      const userStr = await AsyncStorage.getItem("user");
+      if (userStr) {
+        const fallback = JSON.parse(userStr);
+        setUser(fallback);
+        setRestaurant(fallback.restaurant || "");
+        setAddress(fallback.address || "");
+        setPhone(fallback.phone || "");
+        setTax(fallback.tax_percent ? String(fallback.tax_percent) : "");
         setServiceCharge(
-          profile.service_charge ? String(profile.service_charge) : ""
+          fallback.service_charge ? String(fallback.service_charge) : ""
         );
-        // Fetch logo URL if restaurant_id exists
-        if (profile.restaurant_id) {
+        if (fallback.restaurant_id) {
           try {
             const res = await fetch(
-              `https://qrave-backend.onrender.com/public/restaurants/${profile.restaurant_id}/logo`
+              `https://qrave-backend.onrender.com/public/restaurants/${fallback.restaurant_id}/logo`
             );
             const data = await res.json();
             if (data.logo_url) setLogoUrl(data.logo_url);
@@ -55,38 +130,210 @@ export default function AdminProfile() {
         } else {
           setLogoUrl(null);
         }
-      } catch (e) {
-        // fallback to AsyncStorage if backend fails
-        const userStr = await AsyncStorage.getItem("user");
-        if (userStr) {
-          const fallback = JSON.parse(userStr);
-          setUser(fallback);
-          setRestaurant(fallback.restaurant || "");
-          setAddress(fallback.address || "");
-          setPhone(fallback.phone || "");
-          setTax(fallback.tax_percent ? String(fallback.tax_percent) : "");
-          setServiceCharge(
-            fallback.service_charge ? String(fallback.service_charge) : ""
-          );
-          if (fallback.restaurant_id) {
-            try {
-              const res = await fetch(
-                `https://qrave-backend.onrender.com/public/restaurants/${fallback.restaurant_id}/logo`
-              );
-              const data = await res.json();
-              if (data.logo_url) setLogoUrl(data.logo_url);
-            } catch (e) {
-              setLogoUrl(null);
-            }
-          } else {
-            setLogoUrl(null);
-          }
-        }
-      } finally {
-        setLoading(false);
       }
-    })();
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  const loadTables = useCallback(async () => {
+    setTablesLoading(true);
+    setTablesError(null);
+    try {
+      const res = await api.get("/api/admin/tables");
+      const list = Array.isArray(res) ? res : [];
+      setTables(list.filter((t) => !isArchived(t)));
+    } catch (e: any) {
+      setTablesError(e?.message || "Failed to load tables");
+    } finally {
+      setTablesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTables();
+  }, [loadTables]);
+
+  const loadStaff = useCallback(async () => {
+    setStaffLoading(true);
+    setStaffError(null);
+    try {
+      const res = await api.get("/api/admin/staffs");
+      setStaff(Array.isArray(res) ? res : []);
+    } catch (e: any) {
+      setStaffError(e?.message || "Failed to load team members");
+    } finally {
+      setStaffLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStaff();
+  }, [loadStaff]);
+
+  const handleAddTable = async () => {
+    const existing = new Set(
+      tables
+        .map((t) => Number(t?.table_number ?? t?.number))
+        .filter((n) => !isNaN(n) && n > 0)
+    );
+    let nextNumber = 1;
+    while (existing.has(nextNumber)) nextNumber += 1;
+    try {
+      const payload = { number: nextNumber, table_number: nextNumber };
+      const created = await api.post("/api/admin/tables", payload);
+      if (created) {
+        setTables((prev) => [created, ...prev]);
+      } else {
+        const temp = {
+          id: `temp-${Date.now()}`,
+          number: nextNumber,
+          is_enabled: true,
+        };
+        setTables((prev) => [temp, ...prev]);
+      }
+    } catch (e: any) {
+      alert(e?.message || "Failed to add table");
+    }
+  };
+
+  const handleToggleTable = async (table: any) => {
+    const tableId = resolveTableId(table);
+    if (!tableId) return;
+    const nextEnabled = !resolveEnabled(table);
+    try {
+      await api.patch(`/api/admin/tables/${tableId}`, {
+        id: tableId,
+        is_enabled: nextEnabled,
+      });
+      setTables((prev) =>
+        prev.map((t) =>
+          resolveTableId(t) === tableId
+            ? { ...t, is_enabled: nextEnabled, enabled: nextEnabled }
+            : t
+        )
+      );
+    } catch (e: any) {
+      alert(e?.message || "Failed to update table");
+    }
+  };
+
+  const handleDeleteTable = async (table: any) => {
+    const tableId = resolveTableId(table);
+    if (!tableId) return;
+    try {
+      await api.delete(`/api/admin/tables/${tableId}`);
+      setTables((prev) => prev.filter((t) => resolveTableId(t) !== tableId));
+    } catch (e: any) {
+      alert(e?.message || "Failed to remove table");
+    }
+  };
+
+  const handleRemoveStaff = async (member: any) => {
+    const staffId = resolveStaffId(member);
+    if (!staffId) return;
+    try {
+      await api.delete(`/api/admin/delete/${staffId}`);
+      setStaff((prev) => prev.filter((s) => resolveStaffId(s) !== staffId));
+    } catch (e: any) {
+      alert(e?.message || "Failed to remove member");
+    }
+  };
+
+  const handleOpenEditStaff = async (member: any) => {
+    const staffId = resolveStaffId(member);
+    if (!staffId) return;
+    setEditStaffOpen(true);
+    setEditStaffId(staffId);
+    setEditingStaff(true);
+    try {
+      const details = await api.get(`/api/admin/staffDetails/${staffId}`);
+      setEditStaff({
+        name: details?.name || "",
+        email: details?.email || resolveStaffEmail(member) || "",
+        password: "",
+        role: details?.role || resolveStaffRole(member) || "waiter",
+      });
+    } catch (e) {
+      setEditStaff({
+        name: resolveStaffEmail(member)
+          ? resolveStaffEmail(member).split("@")[0]
+          : "",
+        email: resolveStaffEmail(member),
+        password: "",
+        role: resolveStaffRole(member) || "waiter",
+      });
+    } finally {
+      setEditingStaff(false);
+    }
+  };
+
+  const handleUpdateStaff = async () => {
+    const restaurantId = user?.restaurant_id || user?.id;
+    if (!restaurantId || !editStaffId) {
+      alert("Restaurant not found yet.");
+      return;
+    }
+    setEditingStaff(true);
+    try {
+      const payload: Record<string, any> = {
+        name: editStaff.name?.trim() || undefined,
+        email: editStaff.email?.trim() || undefined,
+        role: editStaff.role || undefined,
+      };
+      if (editStaff.password?.trim()) {
+        payload.password = editStaff.password.trim();
+      }
+      Object.keys(payload).forEach(
+        (k) => payload[k] === undefined && delete payload[k],
+      );
+      await api.put(
+        `/api/admin/restaurants/${restaurantId}/staff/${editStaffId}`,
+        payload,
+      );
+      const res = await api.get("/api/admin/staffs");
+      setStaff(Array.isArray(res) ? res : []);
+      setEditStaffOpen(false);
+    } catch (e: any) {
+      const status = e?.status ? ` (status ${e.status})` : "";
+      const detail = e?.body?.message || e?.body?.error;
+      alert(
+        detail
+          ? `Update failed${status}: ${detail}`
+          : `Update failed${status}`,
+      );
+    } finally {
+      setEditingStaff(false);
+    }
+  };
+
+  const handleAddStaff = async () => {
+    const restaurantId = user?.restaurant_id || user?.id;
+    if (!restaurantId) {
+      alert("Restaurant not found yet.");
+      return;
+    }
+    if (!newStaff.name || !newStaff.email || !newStaff.password) {
+      alert("Please fill all fields.");
+      return;
+    }
+    setAddingStaff(true);
+    try {
+      await api.post(`/api/admin/restaurants/${restaurantId}/staff`, newStaff);
+      const res = await api.get("/api/admin/staffs");
+      setStaff(Array.isArray(res) ? res : []);
+      setAddStaffOpen(false);
+      setNewStaff({ name: "", email: "", password: "", role: "waiter" });
+    } catch (e: any) {
+      alert(e?.message || "Failed to create staff member");
+    } finally {
+      setAddingStaff(false);
+    }
+  };
 
   const handleSave = async () => {
     const apiClient = api || namedApi;
@@ -130,6 +377,12 @@ export default function AdminProfile() {
     }
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadProfile(), loadTables(), loadStaff()]);
+    setRefreshing(false);
+  }, [loadProfile, loadTables, loadStaff]);
+
   if (loading) {
     return (
       <View
@@ -144,7 +397,17 @@ export default function AdminProfile() {
   }
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#0a84ff"
+        />
+      }
+    >
       <Text style={styles.title}>Profile</Text>
       <View style={styles.card}>
         <View style={styles.avatarRow}>
@@ -203,21 +466,248 @@ export default function AdminProfile() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Team Members</Text>
-        <View style={styles.memberCard}>
-          <View style={styles.memberAvatar}>
-            {logoUrl ? (
-              <Image source={{ uri: logoUrl }} style={styles.avatar} />
-            ) : (
-              <Image source={iconPng} style={styles.avatar} />
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{user?.name || "User"}</Text>
-            <Text style={styles.email}>{user?.email}</Text>
-          </View>
-          <Text style={styles.role}>OWNER</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Team Members</Text>
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => setAddStaffOpen(true)}
+          >
+            <Text style={styles.secondaryBtnText}>+ Add New</Text>
+          </TouchableOpacity>
         </View>
+        {staffLoading ? (
+          <Text style={styles.mutedText}>Loading team members...</Text>
+        ) : staffError ? (
+          <Text style={styles.errorText}>{staffError}</Text>
+        ) : staff.length === 0 ? (
+          <Text style={styles.mutedText}>No team members onboarded yet.</Text>
+        ) : (
+          staff.map((member) => (
+            <View key={resolveStaffId(member)} style={styles.memberCard}>
+              <View style={styles.memberAvatar}>
+                <Image
+                  source={{ uri: getStaffAvatar(resolveStaffEmail(member)) }}
+                  style={styles.avatar}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>
+                  {resolveStaffEmail(member)
+                    ? resolveStaffEmail(member).split("@")[0]
+                    : "Member"}
+                </Text>
+                <Text style={styles.email}>{resolveStaffEmail(member)}</Text>
+              </View>
+              <View style={styles.memberActions}>
+                <Text style={styles.role}>
+                  {String(resolveStaffRole(member)).toUpperCase()}
+                </Text>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() => handleOpenEditStaff(member)}
+                >
+                  <Text style={styles.editBtnText}>✏️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => handleRemoveStaff(member)}
+                >
+                  <Text style={styles.deleteBtnText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+
+      <Modal
+        visible={addStaffOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAddStaffOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Team Member</Text>
+              <TouchableOpacity onPress={() => setAddStaffOpen(false)}>
+                <Text style={{ fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={newStaff.name}
+              onChangeText={(v) => setNewStaff((s) => ({ ...s, name: v }))}
+              placeholder="Full Name"
+            />
+            <TextInput
+              style={styles.input}
+              value={newStaff.email}
+              onChangeText={(v) => setNewStaff((s) => ({ ...s, email: v }))}
+              placeholder="Work Email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.input}
+              value={newStaff.password}
+              onChangeText={(v) => setNewStaff((s) => ({ ...s, password: v }))}
+              placeholder="Access Password"
+              secureTextEntry
+            />
+            <Text style={styles.inputLabel}>Role</Text>
+            <View style={styles.roleRow}>
+              {[
+                { id: "owner", label: "Owner" },
+                { id: "manager", label: "Manager" },
+                { id: "kitchen", label: "Chef" },
+                { id: "waiter", label: "Waiter" },
+                { id: "cashier", label: "Cashier" },
+              ].map((role) => (
+                <TouchableOpacity
+                  key={role.id}
+                  style={[
+                    styles.rolePill,
+                    newStaff.role === role.id && styles.rolePillActive,
+                  ]}
+                  onPress={() =>
+                    setNewStaff((s) => ({ ...s, role: role.id }))
+                  }
+                >
+                  <Text
+                    style={
+                      newStaff.role === role.id
+                        ? styles.rolePillTextActive
+                        : styles.rolePillText
+                    }
+                  >
+                    {role.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleAddStaff}
+              disabled={addingStaff}
+            >
+              <Text style={styles.saveBtnText}>
+                {addingStaff ? "Saving..." : "Save Member"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={editStaffOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditStaffOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Team Member</Text>
+              <TouchableOpacity onPress={() => setEditStaffOpen(false)}>
+                <Text style={{ fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={editStaff.name}
+              onChangeText={(v) => setEditStaff((s) => ({ ...s, name: v }))}
+              placeholder="Full Name"
+            />
+            <TextInput
+              style={styles.input}
+              value={editStaff.email}
+              onChangeText={(v) => setEditStaff((s) => ({ ...s, email: v }))}
+              placeholder="Work Email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.input}
+              value={editStaff.password}
+              onChangeText={(v) => setEditStaff((s) => ({ ...s, password: v }))}
+              placeholder="New Password (optional)"
+              secureTextEntry
+            />
+            <Text style={styles.inputLabel}>Role</Text>
+            <View style={styles.roleRow}>
+              {[
+                { id: "owner", label: "Owner" },
+                { id: "manager", label: "Manager" },
+                { id: "kitchen", label: "Chef" },
+                { id: "waiter", label: "Waiter" },
+                { id: "cashier", label: "Cashier" },
+              ].map((role) => (
+                <TouchableOpacity
+                  key={role.id}
+                  style={[
+                    styles.rolePill,
+                    editStaff.role === role.id && styles.rolePillActive,
+                  ]}
+                  onPress={() =>
+                    setEditStaff((s) => ({ ...s, role: role.id }))
+                  }
+                >
+                  <Text
+                    style={
+                      editStaff.role === role.id
+                        ? styles.rolePillTextActive
+                        : styles.rolePillText
+                    }
+                  >
+                    {role.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleUpdateStaff}
+              disabled={editingStaff}
+            >
+              <Text style={styles.saveBtnText}>
+                {editingStaff ? "Updating..." : "Update Member"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Floor Plan</Text>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={handleAddTable}>
+            <Text style={styles.secondaryBtnText}>+ Add Table</Text>
+          </TouchableOpacity>
+        </View>
+        {tablesLoading ? (
+          <Text style={styles.mutedText}>Loading tables...</Text>
+        ) : tablesError ? (
+          <Text style={styles.errorText}>{tablesError}</Text>
+        ) : (
+          tables.map((t) => (
+            <View key={resolveTableId(t) || resolveTableLabel(t)} style={styles.tableRow}>
+              <Text style={styles.tableLabel}>{resolveTableLabel(t)}</Text>
+              <View style={styles.tableActions}>
+                <Switch
+                  value={!!resolveEnabled(t)}
+                  onValueChange={() => handleToggleTable(t)}
+                />
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => handleDeleteTable(t)}
+                >
+                  <Text style={styles.deleteBtnText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
       </View>
 
       <View style={styles.section}>
@@ -226,10 +716,13 @@ export default function AdminProfile() {
           <Text style={styles.deviceName}>Kitchen Printer</Text>
           <Text style={styles.deviceStatus}>Connected</Text>
         </View>
-        <View style={styles.deviceCard}>
+        <TouchableOpacity
+          style={styles.deviceCard}
+          onPress={() => router.push("/admin/qr-codes")}
+        >
           <Text style={styles.deviceName}>QR Codes</Text>
           <Text style={styles.deviceStatus}>Manage table QR generation</Text>
-        </View>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -284,7 +777,20 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   section: { marginBottom: 20 },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
+  secondaryBtn: {
+    backgroundColor: "#111827",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  secondaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
   memberCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -294,6 +800,20 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     elevation: 1,
   },
+  memberActions: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  editBtn: {
+    marginTop: 6,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+  },
+  editBtnText: { fontSize: 12 },
   memberAvatar: {
     width: 40,
     height: 40,
@@ -327,4 +847,62 @@ const styles = StyleSheet.create({
   },
   deviceName: { fontWeight: "700", fontSize: 15 },
   deviceStatus: { color: "#22c55e", fontWeight: "600", fontSize: 13 },
+  tableRow: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 1,
+  },
+  tableLabel: { fontWeight: "700", fontSize: 15 },
+  tableActions: { flexDirection: "row", alignItems: "center" },
+  deleteBtn: {
+    marginLeft: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#fee2e2",
+  },
+  deleteBtnText: { color: "#991b1b", fontWeight: "700", fontSize: 12 },
+  mutedText: { color: "#6b7280" },
+  errorText: { color: "#b91c1c" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 520,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700" },
+  inputLabel: { fontSize: 12, fontWeight: "700", marginBottom: 8 },
+  roleRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+  rolePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: "#fff",
+  },
+  rolePillActive: { backgroundColor: "#111827", borderColor: "#111827" },
+  rolePillText: { fontSize: 12, fontWeight: "700", color: "#6b7280" },
+  rolePillTextActive: { fontSize: 12, fontWeight: "700", color: "#fff" },
 });

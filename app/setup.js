@@ -290,7 +290,7 @@ export default function SetupScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [cardOpacity, cardTranslateY]);
 
   const handlePressIn = () => {
     Animated.spring(buttonScale, {
@@ -373,7 +373,7 @@ export default function SetupScreen() {
               <View style={styles.sectionIcon}>
                 <StoreIcon size={18} color={THEME_COLOR} />
               </View>
-              <Text style={styles.sectionTitle}>What's your brand?</Text>
+              <Text style={styles.sectionTitle}>What{"'"}s your brand?</Text>
             </View>
             <View
               style={[

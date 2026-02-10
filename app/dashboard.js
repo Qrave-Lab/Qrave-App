@@ -53,7 +53,7 @@ export default function DashboardScreen() {
         console.warn("Failed to check user", e);
       }
     })();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     AsyncStorage.setItem("orders", JSON.stringify(orders)).catch(() => {});
@@ -71,10 +71,6 @@ export default function DashboardScreen() {
       pathname: "/order-detail",
       params: { order: encodeURIComponent(JSON.stringify(order)) },
     });
-  };
-
-  const updateOrder = (updated) => {
-    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
   };
 
   const clearOrders = () => {
@@ -121,7 +117,11 @@ export default function DashboardScreen() {
         renderItem={({item}) => (
           <OrderCard order={item} onPress={() => openOrder(item)} />
         )}
-        ListEmptyComponent={<Text style={styles.empty}>No orders yet. Tap "Simulate Order" to test.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            No orders yet. Tap {"\""}Simulate Order{"\""} to test.
+          </Text>
+        }
         contentContainerStyle={{ padding: 12 }}
       />
     </View>

@@ -17,7 +17,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import QRCode from "react-native-qrcode-svg";
 import { AdminColors, Fonts } from "../../constants/theme";
-import api from "../../lib/apiClient";
+import apiClient from "../../lib/apiClient";
 
 type Table = {
   id?: string;
@@ -98,15 +98,15 @@ export default function QrCodes() {
   const loadData = useCallback(async () => {
     try {
       const [tablesRes, me] = await Promise.all([
-        api.get("/api/admin/tables"),
-        api.get("/api/admin/me"),
+        apiClient.get("/api/admin/tables"),
+        apiClient.get("/api/admin/me"),
       ]);
       const list = Array.isArray(tablesRes) ? tablesRes : [];
       setTables(list);
       if (list.length > 0) setSelectedTable(list[0]);
       const rid = me?.restaurant_id || me?.restaurantId || me?.id || "";
       setRestaurantId(rid);
-    } catch (e) {
+    } catch {
       // ignore for now
     }
   }, []);
@@ -373,8 +373,6 @@ export default function QrCodes() {
     }
   };
 
-  const cardBg =
-    template === "dark" ? "#111827" : template === "framed" ? "#ffffff" : "#fff";
   const cardText = template === "dark" ? "#ffffff" : "#111827";
 
   const onRefresh = useCallback(async () => {

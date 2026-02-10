@@ -163,7 +163,7 @@ export default function VerifyScreen() {
 
           <Text style={styles.title}>Enter Verification Code</Text>
           <Text style={styles.subtitle}>
-            We've sent a 4-digit code to your email address
+            We{"'"}ve sent a 4-digit code to your email address
           </Text>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -192,7 +192,7 @@ export default function VerifyScreen() {
           </View>
 
           <View style={styles.resendContainer}>
-            <Text style={styles.resendText}>Didn't receive code? </Text>
+            <Text style={styles.resendText}>Didn{"'"}t receive code? </Text>
             <Pressable onPress={handleResend}>
               <Text style={styles.resendLink}>Resend</Text>
             </Pressable>

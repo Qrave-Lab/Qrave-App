@@ -123,7 +123,7 @@ export default function LoginScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [cardOpacity, cardTranslateY]);
 
   const handleTabPress = (tab) => {
     setActiveTab(tab);

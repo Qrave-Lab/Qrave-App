@@ -10,7 +10,7 @@ export default function OrderDetailScreen() {
   let parsed = {};
   try {
     parsed = orderParam ? JSON.parse(decodeURIComponent(orderParam)) : {};
-  } catch (e) {
+  } catch (_e) {
     parsed = {};
   }
 

@@ -161,7 +161,7 @@ export default function ForgotOtpScreen() {
 
           <Text style={styles.title}>Enter Reset Code</Text>
           <Text style={styles.subtitle}>
-            We've sent a 4-digit code to reset your password
+            We{"'"}ve sent a 4-digit code to reset your password
           </Text>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -190,7 +190,7 @@ export default function ForgotOtpScreen() {
           </View>
 
           <View style={styles.resendContainer}>
-            <Text style={styles.resendText}>Didn't receive code? </Text>
+            <Text style={styles.resendText}>Didn{"'"}t receive code? </Text>
             <Pressable onPress={handleResend}>
               <Text style={styles.resendLink}>Resend</Text>
             </Pressable>

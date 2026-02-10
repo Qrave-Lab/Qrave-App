@@ -381,10 +381,8 @@ export default function CustomizeTables() {
     } catch (e: any) {
       const status = e?.status ? ` (status ${e.status})` : "";
       const detail = e?.body?.message || e?.body?.error || e?.message;
-      // eslint-disable-next-line no-console
       console.error("Failed to update order status", e);
       if (detail) {
-        // eslint-disable-next-line no-alert
         alert(`Update failed${status}: ${detail}`);
       }
     }
@@ -403,10 +401,8 @@ export default function CustomizeTables() {
     } catch (e: any) {
       const status = e?.status ? ` (status ${e.status})` : "";
       const detail = e?.body?.message || e?.body?.error || e?.message;
-      // eslint-disable-next-line no-console
       console.error("Failed to update service status", e);
       if (detail) {
-        // eslint-disable-next-line no-alert
         alert(`Update failed${status}: ${detail}`);
       }
     }
@@ -1039,7 +1035,6 @@ export default function CustomizeTables() {
                               message: csv,
                             });
                           } catch (e) {
-                            // eslint-disable-next-line no-console
                             console.error(e);
                           }
                           setPrintModalOpen(false);

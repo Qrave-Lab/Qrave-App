@@ -130,7 +130,7 @@ export default function ForgotPasswordScreen() {
 
           <Text style={styles.title}>Enter your email</Text>
           <Text style={styles.subtitle}>
-            We'll send a 4-digit code to reset your password
+            We{"'"}ll send a 4-digit code to reset your password
           </Text>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}

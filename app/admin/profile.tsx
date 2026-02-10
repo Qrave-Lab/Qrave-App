@@ -14,7 +14,7 @@ import {
 import { useRouter } from "expo-router";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import api, { api as namedApi } from "../../lib/apiClient";
+import apiClient, { api as namedApi } from "../../lib/apiClient";
 
 // Placeholder images
 import iconPng from "../../assets/images/icon.png";
@@ -81,7 +81,7 @@ export default function AdminProfile() {
     setLoading(true);
     try {
       // Always try to fetch from backend first
-      const profile = await api.get("/api/admin/me");
+      const profile = await apiClient.get("/api/admin/me");
       setUser(profile);
       setRestaurant(profile.restaurant || "");
       setAddress(profile.address || "");
@@ -98,13 +98,13 @@ export default function AdminProfile() {
           );
           const data = await res.json();
           if (data.logo_url) setLogoUrl(data.logo_url);
-        } catch (e) {
+        } catch {
           setLogoUrl(null);
         }
       } else {
         setLogoUrl(null);
       }
-    } catch (e) {
+    } catch {
       // fallback to AsyncStorage if backend fails
       const userStr = await AsyncStorage.getItem("user");
       if (userStr) {
@@ -124,7 +124,7 @@ export default function AdminProfile() {
             );
             const data = await res.json();
             if (data.logo_url) setLogoUrl(data.logo_url);
-          } catch (e) {
+          } catch {
             setLogoUrl(null);
           }
         } else {
@@ -144,7 +144,7 @@ export default function AdminProfile() {
     setTablesLoading(true);
     setTablesError(null);
     try {
-      const res = await api.get("/api/admin/tables");
+      const res = await apiClient.get("/api/admin/tables");
       const list = Array.isArray(res) ? res : [];
       setTables(list.filter((t) => !isArchived(t)));
     } catch (e: any) {
@@ -162,7 +162,7 @@ export default function AdminProfile() {
     setStaffLoading(true);
     setStaffError(null);
     try {
-      const res = await api.get("/api/admin/staffs");
+      const res = await apiClient.get("/api/admin/staffs");
       setStaff(Array.isArray(res) ? res : []);
     } catch (e: any) {
       setStaffError(e?.message || "Failed to load team members");
@@ -185,7 +185,7 @@ export default function AdminProfile() {
     while (existing.has(nextNumber)) nextNumber += 1;
     try {
       const payload = { number: nextNumber, table_number: nextNumber };
-      const created = await api.post("/api/admin/tables", payload);
+      const created = await apiClient.post("/api/admin/tables", payload);
       if (created) {
         setTables((prev) => [created, ...prev]);
       } else {
@@ -206,7 +206,7 @@ export default function AdminProfile() {
     if (!tableId) return;
     const nextEnabled = !resolveEnabled(table);
     try {
-      await api.patch(`/api/admin/tables/${tableId}`, {
+      await apiClient.patch(`/api/admin/tables/${tableId}`, {
         id: tableId,
         is_enabled: nextEnabled,
       });
@@ -226,7 +226,7 @@ export default function AdminProfile() {
     const tableId = resolveTableId(table);
     if (!tableId) return;
     try {
-      await api.delete(`/api/admin/tables/${tableId}`);
+      await apiClient.delete(`/api/admin/tables/${tableId}`);
       setTables((prev) => prev.filter((t) => resolveTableId(t) !== tableId));
     } catch (e: any) {
       alert(e?.message || "Failed to remove table");
@@ -237,7 +237,7 @@ export default function AdminProfile() {
     const staffId = resolveStaffId(member);
     if (!staffId) return;
     try {
-      await api.delete(`/api/admin/delete/${staffId}`);
+      await apiClient.delete(`/api/admin/delete/${staffId}`);
       setStaff((prev) => prev.filter((s) => resolveStaffId(s) !== staffId));
     } catch (e: any) {
       alert(e?.message || "Failed to remove member");
@@ -251,14 +251,14 @@ export default function AdminProfile() {
     setEditStaffId(staffId);
     setEditingStaff(true);
     try {
-      const details = await api.get(`/api/admin/staffDetails/${staffId}`);
+      const details = await apiClient.get(`/api/admin/staffDetails/${staffId}`);
       setEditStaff({
         name: details?.name || "",
         email: details?.email || resolveStaffEmail(member) || "",
         password: "",
         role: details?.role || resolveStaffRole(member) || "waiter",
       });
-    } catch (e) {
+    } catch {
       setEditStaff({
         name: resolveStaffEmail(member)
           ? resolveStaffEmail(member).split("@")[0]
@@ -291,11 +291,11 @@ export default function AdminProfile() {
       Object.keys(payload).forEach(
         (k) => payload[k] === undefined && delete payload[k],
       );
-      await api.put(
+      await apiClient.put(
         `/api/admin/restaurants/${restaurantId}/staff/${editStaffId}`,
         payload,
       );
-      const res = await api.get("/api/admin/staffs");
+      const res = await apiClient.get("/api/admin/staffs");
       setStaff(Array.isArray(res) ? res : []);
       setEditStaffOpen(false);
     } catch (e: any) {
@@ -323,8 +323,8 @@ export default function AdminProfile() {
     }
     setAddingStaff(true);
     try {
-      await api.post(`/api/admin/restaurants/${restaurantId}/staff`, newStaff);
-      const res = await api.get("/api/admin/staffs");
+      await apiClient.post(`/api/admin/restaurants/${restaurantId}/staff`, newStaff);
+      const res = await apiClient.get("/api/admin/staffs");
       setStaff(Array.isArray(res) ? res : []);
       setAddStaffOpen(false);
       setNewStaff({ name: "", email: "", password: "", role: "waiter" });
@@ -336,7 +336,7 @@ export default function AdminProfile() {
   };
 
   const handleSave = async () => {
-    const apiClient = api || namedApi;
+    const client = apiClient || namedApi;
     if (!user) return;
 
     try {
@@ -361,7 +361,7 @@ export default function AdminProfile() {
         "Sending PATCH request to /api/admin/update-details with payload:",
         payload
       );
-      const response = await apiClient.patch(
+      const response = await client.patch(
         "/api/admin/update-details",
         payload
       );

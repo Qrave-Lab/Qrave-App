@@ -110,7 +110,7 @@ export default function CompleteScreen() {
           </Animated.View>
 
           <Animated.View style={{ opacity: textOpacity }}>
-            <Text style={styles.title}>You're all set!</Text>
+            <Text style={styles.title}>You{"'"}re all set!</Text>
             <Text style={styles.subtitle}>
               Your restaurant is ready to accept orders.{"\n"}
               Start managing your tables and menu.

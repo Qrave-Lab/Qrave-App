@@ -82,7 +82,10 @@ export default function ForgotOtpScreen() {
         const msg = await res.text();
         throw new Error(msg || "Invalid code");
       }
-      router.push({ pathname: "/reset-password", params: { email } });
+      router.push({
+        pathname: "/reset-password",
+        params: { email, code: code.join("") },
+      });
     } catch (err) {
       setError(err?.message || "Verification failed");
     } finally {

@@ -173,7 +173,14 @@ export default function LoginScreen() {
       const role = user?.role;
       const isAdmin = role === "owner" || role === "manager";
       const isWaiter = role === "waiter";
-      const target = isAdmin ? "/admin" : isWaiter ? "/waiter" : "/dashboard";
+      const isKitchen = role === "kitchen" || role === "chef";
+      const target = isAdmin
+        ? "/admin"
+        : isWaiter
+          ? "/waiter"
+          : isKitchen
+            ? "/kitchen"
+            : "/dashboard";
       router.replace(target);
     } catch (err) {
       const msg = err?.body?.message || err.message || "Login failed";
@@ -231,11 +238,15 @@ export default function LoginScreen() {
         await AsyncStorage.setItem("qrave_refresh", refreshToken);
       }
 
-      await fetch(`${BASE_URL}/public/otp/request`, {
+      const otpRes = await fetch(`${BASE_URL}/public/otp/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      if (!otpRes.ok) {
+        const body = await otpRes.text().catch(() => "");
+        throw new Error(body || "Failed to send verification code");
+      }
 
       router.push({ pathname: "/verify", params: { email } });
     } catch (err) {

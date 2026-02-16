@@ -43,8 +43,9 @@ const styles = StyleSheet.create({
 
 function WaiterTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const iconsMap: Record<string, string> = {
-    orders: "doc.text",
-    tables: "fork.knife",
+    "customize-tables": "table-restaurant",
+    menu: "restaurant-menu",
+    profile: "person",
   };
 
   return (
@@ -57,7 +58,9 @@ function WaiterTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           paddingHorizontal: 12,
         }}
       >
-        {state.routes.map((route, idx) => {
+        {state.routes
+          .filter((route) => route.name !== "index" && route.name !== "take-order")
+          .map((route, idx) => {
           const focused = state.index === idx;
           const label =
             (descriptors[route.key].options.title as string) ?? route.name;
@@ -161,8 +164,14 @@ export default function WaiterTabLayout() {
           }}
           tabBar={(props) => <WaiterTabBar {...props} />}
         >
-          <Tabs.Screen name="orders" options={{ title: "Orders" }} />
-          <Tabs.Screen name="tables" options={{ title: "Tables" }} />
+          <Tabs.Screen name="index" options={{ href: null }} />
+          <Tabs.Screen
+            name="customize-tables"
+            options={{ title: "Floor" }}
+          />
+          <Tabs.Screen name="menu" options={{ title: "Menu" }} />
+          <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+          <Tabs.Screen name="take-order" options={{ href: null }} />
         </Tabs>
       </View>
     </SafeAreaView>

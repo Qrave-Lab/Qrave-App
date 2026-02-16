@@ -185,7 +185,7 @@ export default function QrCodes() {
   const buildPrintHtml = (qrImgOverride?: string | null) => {
     const qrImgData = qrImgOverride || qrDataUrl;
     const qrImg = qrImgData
-      ? `<img src="${qrImgData}" style="width:220px;height:220px;" />`
+      ? `<img class="qrimg" src="${qrImgData}" alt="QR Code" />`
       : "";
     const logoHtml = logoImage?.dataUrl
       ? `<img src="${logoImage.dataUrl}" style="height:48px;object-fit:contain;" />`
@@ -251,15 +251,26 @@ export default function QrCodes() {
               border-radius: 20px;
               padding: 16px;
               margin: 18px 0;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
               ${
                 template === "dark"
                   ? "border:1px solid rgba(255,255,255,0.2);"
                   : ""
               }
             }
+            .qrimg {
+              width: 220px;
+              height: 220px;
+              display: block;
+              margin: 0 auto;
+            }
             .scan {
               margin-top: 10px;
-              display:inline-block;
+              display: block;
+              width: fit-content;
               padding: 6px 14px;
               border-radius: 20px;
               background: ${brandColor};
@@ -668,7 +679,7 @@ export default function QrCodes() {
                 <QRCode
                   value={qrValue}
                   size={200}
-                  color="#000000"
+                  color={template === "dark" ? "#ffffff" : "#000000"}
                   backgroundColor="transparent"
                   getRef={(c) => {
                     printQrRef.current = c;

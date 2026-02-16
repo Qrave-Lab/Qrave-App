@@ -11,12 +11,13 @@ import {
   ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 
 const { width, height } = Dimensions.get("window");
 const THEME_COLOR = "#F4B400";
 const THEME_DARK = "#E5A800";
+const BASE_URL = "https://qrave-backend.onrender.com";
 
 const LockIcon = ({ color = "#999" }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -67,12 +68,16 @@ const EyeIcon = ({ open, color = "#999" }) => (
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const { email, code } = useLocalSearchParams();
+  const normalizedEmail = Array.isArray(email) ? email[0] : email;
+  const normalizedCode = Array.isArray(code) ? code[0] : code;
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState("");
   const [newPasswordFocused, setNewPasswordFocused] = useState(false);
   const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
 
@@ -95,11 +100,58 @@ export default function ResetPasswordScreen() {
     }).start();
   };
 
+  const attemptReset = async (payloads, endpoints) => {
+    for (const endpoint of endpoints) {
+      for (const payload of payloads) {
+        const res = await fetch(`${BASE_URL}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.status === 404 || res.status === 405) {
+          continue;
+        }
+
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || "Reset failed");
+        }
+
+        return true;
+      }
+    }
+    throw new Error("Reset endpoint not available");
+  };
+
   const handleReset = async () => {
+    setError("");
+    if (!normalizedEmail) {
+      setError("Missing email. Please restart the reset flow.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
     if (newPassword !== confirmPassword) return;
+
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const payloads = [
+        { email: normalizedEmail, password: newPassword, code: normalizedCode },
+        { email: normalizedEmail, new_password: newPassword, code: normalizedCode },
+        { email: normalizedEmail, newPassword, code: normalizedCode },
+      ];
+      const endpoints = [
+        "/auth/forgot-password/reset",
+        "/auth/reset-password",
+        "/auth/password/reset",
+        "/public/reset-password",
+        "/public/password/reset",
+      ];
+      await attemptReset(payloads, endpoints);
+
       setIsSuccess(true);
       Animated.spring(successScale, {
         toValue: 1,
@@ -110,7 +162,11 @@ export default function ResetPasswordScreen() {
       setTimeout(() => {
         router.replace("/login");
       }, 1200);
-    }, 900);
+    } catch (err) {
+      setError(err?.message || "Reset failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const passwordsMatch =
@@ -250,6 +306,7 @@ export default function ResetPasswordScreen() {
                 <EyeIcon open={showConfirmPassword} color={confirmPasswordFocused ? THEME_COLOR : "#999"} />
               </Pressable>
             </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
             {confirmPassword && !passwordsMatch ? (
               <Text style={styles.errorText}>Passwords do not match</Text>
             ) : null}

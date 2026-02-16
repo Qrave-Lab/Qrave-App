@@ -1,5 +1,5 @@
 /**
- * Admin screen for customizing and managing restaurant tables.
+ * Waiter screen for managing the restaurant floor.
  *
  * Displays a floor overview, table metrics, and allows filtering, searching, and sorting of tables.
  * Supports actions such as moving, merging, printing bills, and marking tables as paid or free.
@@ -16,7 +16,7 @@
  * - Activity feed with tabs for kitchen and service requests, including accept/reject actions.
  *
  * @component
- * @returns {JSX.Element} The admin customize tables screen.
+ * @returns {JSX.Element} The waiter floor screen.
  */
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
@@ -33,9 +33,10 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { ThemedText, type ThemedTextProps } from "../../components/themed-text";
 import { IconSymbol } from "../../components/ui/icon-symbol";
-import { AdminColors } from "../../constants/theme";
+import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
 
 type Table = {
@@ -109,9 +110,9 @@ type ServiceCallAPI = {
   created_at: string;
 };
 
-const AdminText = ({
-  lightColor = AdminColors.text,
-  darkColor = AdminColors.text,
+const WaiterText = ({
+  lightColor = WaiterColors.text,
+  darkColor = WaiterColors.text,
   ...rest
 }: ThemedTextProps) => (
   <ThemedText lightColor={lightColor} darkColor={darkColor} {...rest} />
@@ -141,6 +142,7 @@ const SAMPLE_TABLES: Table[] = [
 ];
 
 export default function CustomizeTables() {
+  const router = useRouter();
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"number" | "value" | "time">("number");
@@ -928,38 +930,59 @@ export default function CustomizeTables() {
     setRefreshing(false);
   }, [loadTables, refreshActivities]);
 
+  const handleOpenTakeOrder = useCallback(
+    (table: Table) => {
+      const tableId = String(table.tableId || table.id || "");
+      const tableNumber = getTableNumber(table);
+      const params: Record<string, string> = {};
+      const existingSession = activeOrders.find(
+        (o) => tableNumber !== undefined && o.table_number === tableNumber,
+      )?.session_id;
+      if (tableId) params.table_id = tableId;
+      if (tableNumber !== undefined) params.table_number = String(tableNumber);
+      if (restaurantId) params.restaurant_id = restaurantId;
+      if (existingSession) params.session_id = String(existingSession);
+
+      router.push({
+        pathname: "/waiter/take-order",
+        params,
+      } as any);
+    },
+    [activeOrders, router, restaurantId],
+  );
+
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: AdminColors.background }}
+      style={{ flex: 1, backgroundColor: WaiterColors.background }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.container}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor={AdminColors.primary}
+          tintColor={WaiterColors.primary}
         />
       }
     >
       {loading && (
         <View style={{ padding: 16 }}>
-          <AdminText>Loading tables...</AdminText>
+          <WaiterText>Loading tables...</WaiterText>
         </View>
       )}
       {error && (
         <View style={{ padding: 16 }}>
-          <AdminText style={{ color: "red" }}>{error}</AdminText>
+          <WaiterText style={{ color: "red" }}>{error}</WaiterText>
         </View>
       )}
       <View style={styles.headerRow}>
-        <AdminText type="title">Floor Overview</AdminText>
+        <WaiterText type="title">Floor Overview</WaiterText>
         <View style={styles.headerRight}>
-          <AdminText type="defaultSemiBold">
+          <WaiterText type="defaultSemiBold">
             {formatRupees(todaySales)}
-          </AdminText>
-          <AdminText>
+          </WaiterText>
+          <WaiterText>
             {occupiedCount} / {totalTables}
-          </AdminText>
+          </WaiterText>
         </View>
       </View>
 
@@ -968,34 +991,34 @@ export default function CustomizeTables() {
           <View style={[styles.metricIcon, styles.metricPendingBg]}>
             <IconSymbol name="fork.knife" size={18} color="#374151" />
           </View>
-          <AdminText type="defaultSemiBold">Pending</AdminText>
-          <AdminText type="defaultSemiBold">Orders</AdminText>
-          <AdminText type="title">
+          <WaiterText type="defaultSemiBold">Pending</WaiterText>
+          <WaiterText type="defaultSemiBold">Orders</WaiterText>
+          <WaiterText type="title">
             {activeOrders.filter((o) => o.status === "pending").length}
-          </AdminText>
+          </WaiterText>
         </View>
         <View style={styles.metricCard}>
           <View style={[styles.metricIcon, styles.metricBillBg]}>
             <IconSymbol name="doc.text" size={18} color="#1E3A8A" />
           </View>
-          <AdminText type="defaultSemiBold">Bill Request</AdminText>
-          <AdminText type="title">0</AdminText>
+          <WaiterText type="defaultSemiBold">Bill Request</WaiterText>
+          <WaiterText type="title">0</WaiterText>
         </View>
         <View style={styles.metricCard}>
           <View style={[styles.metricIcon, styles.metricServiceBg]}>
             <IconSymbol name="bell.fill" size={18} color="#075985" />
           </View>
-          <AdminText type="defaultSemiBold">Service Calls</AdminText>
-          <AdminText type="title">
+          <WaiterText type="defaultSemiBold">Service Calls</WaiterText>
+          <WaiterText type="title">
             {serviceCalls.filter((c) => c.status !== "done").length}
-          </AdminText>
+          </WaiterText>
         </View>
         <View style={styles.metricCard}>
           <View style={[styles.metricIcon, styles.metricLongBg]}>
             <IconSymbol name="clock" size={18} color="#7F1D1D" />
           </View>
-          <AdminText type="defaultSemiBold">Long Sitting</AdminText>
-          <AdminText type="title">0</AdminText>
+          <WaiterText type="defaultSemiBold">Long Sitting</WaiterText>
+          <WaiterText type="title">0</WaiterText>
         </View>
       </View>
 
@@ -1014,7 +1037,7 @@ export default function CustomizeTables() {
                 styles.filterBtn,
                 filter === f.key
                   ? styles.filterActive
-                  : { backgroundColor: AdminColors.card },
+                  : { backgroundColor: WaiterColors.card },
               ]}
             >
               <Text
@@ -1079,7 +1102,7 @@ export default function CustomizeTables() {
         numColumns={2}
         columnWrapperStyle={{ justifyContent: "space-between" }}
         renderItem={({ item }) => (
-          <View
+          <TouchableOpacity
             style={[
               styles.tableCard,
               !item.isActive ? styles.tableFree : null,
@@ -1087,50 +1110,57 @@ export default function CustomizeTables() {
               item.flag === "long" ? styles.tableLong : null,
               freeLoading === item.id ? { opacity: 0.5 } : null,
             ]}
+            activeOpacity={1}
           >
             <TouchableOpacity
-              style={[
-                styles.optionsBtn,
-                !item.isActive ? { opacity: 0.45 } : undefined,
-              ]}
-              onPress={() =>
-                item.isActive &&
-                setOpenMenuId(openMenuId === item.id ? null : item.id)
-              }
-              disabled={!item.isActive}
+              style={styles.optionsBtn}
+              onPress={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
             >
               <Text style={{ fontSize: 18 }}>...</Text>
             </TouchableOpacity>
-            {openMenuId === item.id && item.isActive ? (
+            {openMenuId === item.id ? (
               <View style={styles.optionsMenu}>
                 {[
                   {
-                    key: "move",
-                    label: "Move Table",
-                    icon: "arrow.right.arrow.left",
+                    key: "order",
+                    label: "Place Order",
+                    icon: "cart",
                   },
-                  {
-                    key: "merge",
-                    label: "Merge Bill",
-                    icon: "arrow.triangle.branch",
-                  },
-                  { key: "print", label: "Print Bill", icon: "doc.text" },
-                  {
-                    key: "paid",
-                    label: "Mark Paid",
-                    icon: "checkmark.circle",
-                    tone: "success",
-                  },
-                  {
-                    key: "free",
-                    label: "Free Table",
-                    icon: "square.and.arrow.up",
-                  },
-                ].map((op) => (
+                  ...(item.isActive
+                    ? [
+                        {
+                          key: "move",
+                          label: "Move Table",
+                          icon: "arrow.right.arrow.left",
+                        },
+                        {
+                          key: "merge",
+                          label: "Merge Bill",
+                          icon: "arrow.triangle.branch",
+                        },
+                        { key: "print", label: "Print Bill", icon: "doc.text" },
+                        {
+                          key: "paid",
+                          label: "Mark Paid",
+                          icon: "checkmark.circle",
+                          tone: "success",
+                        },
+                        {
+                          key: "free",
+                          label: "Free Table",
+                          icon: "square.and.arrow.up",
+                        },
+                      ]
+                    : []),
+                ].map((op: any) => (
                   <TouchableOpacity
                     key={op.key}
                     onPress={() => {
                       setOpenMenuId(null);
+                      if (op.key === "order") {
+                        handleOpenTakeOrder(item);
+                        return;
+                      }
                       if (op.key === "move") {
                         setMoveError(null);
                         setMoveSource(item.id);
@@ -1165,7 +1195,7 @@ export default function CustomizeTables() {
                         name={op.icon as any}
                         size={16}
                         color={
-                          op.tone === "success" ? "#16a34a" : AdminColors.text
+                          op.tone === "success" ? "#16a34a" : WaiterColors.text
                         }
                       />
                       <Text
@@ -1183,7 +1213,7 @@ export default function CustomizeTables() {
               </View>
             ) : null}
             <View>
-              <AdminText type="title">Table {item.number || item.id}</AdminText>
+              <WaiterText type="title">Table {item.number || item.id}</WaiterText>
               {item.mergedWith && item.mergedWith.length > 0 ? (
                 <View style={styles.mergedBadge}>
                   <Text style={styles.mergedBadgeText}>
@@ -1191,21 +1221,21 @@ export default function CustomizeTables() {
                   </Text>
                 </View>
               ) : null}
-              <AdminText
+              <WaiterText
                 style={{
                   color: item.isActive ? "green" : "#94a3b8",
                   fontWeight: "bold",
                 }}
               >
                 {item.isActive ? "Active" : "Available"}
-              </AdminText>
+              </WaiterText>
               <View style={styles.tableMetaRow}>
                 <IconSymbol
                   name={item.isActive ? "clock" : "fork.knife"}
                   size={14}
                   color={item.isActive ? "#94a3b8" : "#cbd5e1"}
                 />
-                <AdminText
+                <WaiterText
                   style={
                     item.isActive
                       ? styles.tableMetaText
@@ -1213,19 +1243,19 @@ export default function CustomizeTables() {
                   }
                 >
                   {item.isActive ? item.time || "Just now" : "Available"}
-                </AdminText>
+                </WaiterText>
               </View>
             </View>
             {item.isActive ? (
               <View style={styles.tableStats}>
                 <View style={styles.itemsBox}>
-                  <AdminText>ITEMS</AdminText>
-                  <AdminText type="defaultSemiBold">{item.items}</AdminText>
+                  <WaiterText>ITEMS</WaiterText>
+                  <WaiterText type="defaultSemiBold">{item.items}</WaiterText>
                 </View>
-                <AdminText type="defaultSemiBold">{item.total}</AdminText>
+                <WaiterText type="defaultSemiBold">{item.total}</WaiterText>
               </View>
             ) : null}
-          </View>
+          </TouchableOpacity>
         )}
         ListFooterComponent={<View style={{ height: 8 }} />}
       />
@@ -1245,7 +1275,7 @@ export default function CustomizeTables() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <AdminText type="title">Merge Bill</AdminText>
+              <WaiterText type="title">Merge Bill</WaiterText>
               <TouchableOpacity
                 onPress={() => {
                   if (!mergeLoading) {
@@ -1257,7 +1287,7 @@ export default function CustomizeTables() {
                 <Text style={{ fontSize: 18 }}>✕</Text>
               </TouchableOpacity>
             </View>
-            <AdminText style={{ marginBottom: 12 }}>
+            <WaiterText style={{ marginBottom: 12 }}>
               {(() => {
                 const src = tablesWithOrders.find((t) => t.id === mergeSource);
                 const label = src
@@ -1265,18 +1295,18 @@ export default function CustomizeTables() {
                   : mergeSource;
                 return `Merging ${label} into another occupied table`;
               })()}
-            </AdminText>
+            </WaiterText>
             {mergeError ? (
-              <AdminText style={{ color: "red", marginBottom: 8 }}>
+              <WaiterText style={{ color: "red", marginBottom: 8 }}>
                 {mergeError}
-              </AdminText>
+              </WaiterText>
             ) : null}
             {mergeLoading ? (
               <View style={{ padding: 24, alignItems: "center" }}>
-                <ActivityIndicator size="large" color={AdminColors.primary} />
-                <AdminText style={{ marginTop: 10 }}>
+                <ActivityIndicator size="large" color={WaiterColors.primary} />
+                <WaiterText style={{ marginTop: 10 }}>
                   Merging bills...
-                </AdminText>
+                </WaiterText>
               </View>
             ) : (
               <FlatList
@@ -1302,9 +1332,9 @@ export default function CustomizeTables() {
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyMoveState}>
-                    <AdminText>
+                    <WaiterText>
                       No other occupied tables to merge with.
-                    </AdminText>
+                    </WaiterText>
                   </View>
                 }
               />
@@ -1323,12 +1353,12 @@ export default function CustomizeTables() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <AdminText type="title">Move Table</AdminText>
+              <WaiterText type="title">Move Table</WaiterText>
               <TouchableOpacity onPress={() => setMoveModalOpen(false)}>
                 <Text style={{ fontSize: 18 }}>x</Text>
               </TouchableOpacity>
             </View>
-            <AdminText style={{ marginBottom: 12 }}>
+            <WaiterText style={{ marginBottom: 12 }}>
               {(() => {
                 const src = tablesData.find((t) => t.id === moveSource);
                 const label = src
@@ -1336,11 +1366,11 @@ export default function CustomizeTables() {
                   : moveSource;
                 return `Moving ${label} to another table`;
               })()}
-            </AdminText>
+            </WaiterText>
             {moveError ? (
-              <AdminText style={{ color: "red", marginBottom: 8 }}>
+              <WaiterText style={{ color: "red", marginBottom: 8 }}>
                 {moveError}
-              </AdminText>
+              </WaiterText>
             ) : null}
 
             <FlatList
@@ -1376,7 +1406,7 @@ export default function CustomizeTables() {
               )}
               ListEmptyComponent={
                 <View style={styles.emptyMoveState}>
-                  <AdminText>No empty tables available.</AdminText>
+                  <WaiterText>No empty tables available.</WaiterText>
                 </View>
               }
             />
@@ -1394,7 +1424,7 @@ export default function CustomizeTables() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <AdminText type="title">Print Bill</AdminText>
+              <WaiterText type="title">Print Bill</WaiterText>
               <TouchableOpacity onPress={() => setPrintModalOpen(false)}>
                 <Text style={{ fontSize: 18 }}>x</Text>
               </TouchableOpacity>
@@ -1404,14 +1434,14 @@ export default function CustomizeTables() {
                   const table = tablesData.find((t) => t.id === printSource);
                   return (
                     <>
-                      <AdminText style={{ marginBottom: 12 }}>
+                      <WaiterText style={{ marginBottom: 12 }}>
                         {(() => {
                           const label = table
                             ? `T${table.number ?? getTableNumber(table) ?? table.id}`
                             : printSource;
                           return `Bill for ${label}`;
                         })()}
-                      </AdminText>
+                      </WaiterText>
                       <View style={{ marginBottom: 12 }}>
                         <Text>Items: {table?.items ?? 0}</Text>
                         <Text>Total: {table?.total ?? "-"}</Text>
@@ -1461,7 +1491,7 @@ export default function CustomizeTables() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <AdminText type="title">Mark as Paid</AdminText>
+              <WaiterText type="title">Mark as Paid</WaiterText>
               <TouchableOpacity
                 onPress={() => {
                   if (!paidLoading) {
@@ -1480,9 +1510,9 @@ export default function CustomizeTables() {
                 tblNumber !== undefined ? billGroups.get(tblNumber) : undefined;
               return (
                 <>
-                  <AdminText style={{ marginBottom: 6 }}>
+                  <WaiterText style={{ marginBottom: 6 }}>
                     Table {tblNumber ? `T${tblNumber}` : paidSource}
-                  </AdminText>
+                  </WaiterText>
                   {bg ? (
                     <View style={[styles.mergedBadge, { marginBottom: 8 }]}>
                       <Text style={styles.mergedBadgeText}>
@@ -1493,11 +1523,11 @@ export default function CustomizeTables() {
                       </Text>
                     </View>
                   ) : null}
-                  <AdminText style={{ marginBottom: 4, color: "#6B7280" }}>
+                  <WaiterText style={{ marginBottom: 4, color: "#6B7280" }}>
                     {tbl ? `${tbl.items} items • ${tbl.total}` : ""}
-                  </AdminText>
+                  </WaiterText>
                   {bg ? (
-                    <AdminText
+                    <WaiterText
                       style={{
                         marginBottom: 16,
                         color: "#4338CA",
@@ -1507,7 +1537,7 @@ export default function CustomizeTables() {
                     >
                       Paying will settle & free all{" "}
                       {bg.linkedTableNumbers.length} tables
-                    </AdminText>
+                    </WaiterText>
                   ) : (
                     <View style={{ marginBottom: 16 }} />
                   )}
@@ -1516,16 +1546,16 @@ export default function CustomizeTables() {
             })()}
             {paidLoading ? (
               <View style={{ padding: 24, alignItems: "center" }}>
-                <ActivityIndicator size="large" color={AdminColors.primary} />
-                <AdminText style={{ marginTop: 10 }}>
+                <ActivityIndicator size="large" color={WaiterColors.primary} />
+                <WaiterText style={{ marginTop: 10 }}>
                   Processing payment...
-                </AdminText>
+                </WaiterText>
               </View>
             ) : (
               <View>
-                <AdminText style={{ marginBottom: 12, fontWeight: "700" }}>
+                <WaiterText style={{ marginBottom: 12, fontWeight: "700" }}>
                   Select Payment Mode
-                </AdminText>
+                </WaiterText>
                 {(["cash", "card", "upi"] as const).map((mode) => (
                   <TouchableOpacity
                     key={mode}
@@ -1563,7 +1593,7 @@ export default function CustomizeTables() {
       </Modal>
 
       <View style={styles.section}>
-        <AdminText type="subtitle">Activity Feed</AdminText>
+        <WaiterText type="subtitle">Activity Feed</WaiterText>
 
         <View style={styles.activityTabsRow}>
           <TouchableOpacity
@@ -1614,9 +1644,9 @@ export default function CustomizeTables() {
         </View>
 
         {activityLoading ? (
-          <AdminText>Loading activity...</AdminText>
+          <WaiterText>Loading activity...</WaiterText>
         ) : activityError ? (
-          <AdminText style={{ color: "red" }}>{activityError}</AdminText>
+          <WaiterText style={{ color: "red" }}>{activityError}</WaiterText>
         ) : (
           activities
             .filter((a) =>
@@ -1628,11 +1658,11 @@ export default function CustomizeTables() {
               <View key={a.id} style={styles.activityCard}>
                 <View style={styles.activityLeft}>
                   <View style={styles.tableBadge}>
-                    <AdminText>{a.table}</AdminText>
+                    <WaiterText>{a.table}</WaiterText>
                   </View>
                   <View style={{ marginLeft: 8 }}>
-                    <AdminText type="defaultSemiBold">{a.title}</AdminText>
-                    <AdminText>{a.note}</AdminText>
+                    <WaiterText type="defaultSemiBold">{a.title}</WaiterText>
+                    <WaiterText>{a.note}</WaiterText>
                   </View>
                 </View>
                 <View style={styles.activityActions}>
@@ -1716,7 +1746,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 12,
     paddingBottom: 32,
-    backgroundColor: AdminColors.background,
+    backgroundColor: WaiterColors.background,
   },
   headerRow: {
     flexDirection: "row",
@@ -1735,7 +1765,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: AdminColors.card,
+    backgroundColor: WaiterColors.card,
     alignItems: "center",
   },
   metricIcon: {
@@ -1757,15 +1787,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     marginRight: 8,
-    backgroundColor: AdminColors.secondary,
+    backgroundColor: WaiterColors.secondary,
   },
-  filterActive: { backgroundColor: AdminColors.primary },
-  filterText: { color: AdminColors.text },
-  filterTextActive: { color: AdminColors.card, fontWeight: "700" },
+  filterActive: { backgroundColor: WaiterColors.primary },
+  filterText: { color: WaiterColors.text },
+  filterTextActive: { color: WaiterColors.card, fontWeight: "700" },
   searchInput: {
     padding: 10,
     borderRadius: 10,
-    backgroundColor: AdminColors.card,
+    backgroundColor: WaiterColors.card,
     borderWidth: 1,
     borderColor: "#eee",
   },
@@ -1815,7 +1845,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 12,
     borderRadius: 10,
-    backgroundColor: AdminColors.card,
+    backgroundColor: WaiterColors.card,
     marginTop: 8,
   },
   activityLeft: { flexDirection: "row", alignItems: "center" },
@@ -1854,7 +1884,7 @@ const styles = StyleSheet.create({
     top: 40,
     right: 8,
     width: 160,
-    backgroundColor: AdminColors.card,
+    backgroundColor: WaiterColors.card,
     borderRadius: 10,
     paddingVertical: 6,
     zIndex: 30,
@@ -1875,7 +1905,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   optionsItemText: {
-    color: AdminColors.text,
+    color: WaiterColors.text,
     fontWeight: "600",
   },
   optionsItemTextSuccess: {
@@ -1886,14 +1916,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: AdminColors.card,
+    backgroundColor: WaiterColors.card,
     marginLeft: 8,
   },
   sortMenu: {
     position: "absolute",
     top: 44,
     right: 0,
-    backgroundColor: AdminColors.card,
+    backgroundColor: WaiterColors.card,
     borderRadius: 8,
     paddingVertical: 6,
     width: 160,
@@ -1919,7 +1949,7 @@ const styles = StyleSheet.create({
   modalContent: {
     width: "100%",
     maxHeight: "80%",
-    backgroundColor: AdminColors.card,
+    backgroundColor: WaiterColors.card,
     borderRadius: 12,
     padding: 12,
   },
@@ -1935,7 +1965,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 8,
-    backgroundColor: AdminColors.background,
+    backgroundColor: WaiterColors.background,
     marginBottom: 8,
   },
   emptyMoveState: {
@@ -1959,7 +1989,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: "center",
-    backgroundColor: AdminColors.primary,
+    backgroundColor: WaiterColors.primary,
   },
   activityTabsRow: { flexDirection: "row", marginVertical: 12 },
   activityTab: {
@@ -1968,10 +1998,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
-    backgroundColor: AdminColors.background,
+    backgroundColor: WaiterColors.background,
     marginRight: 8,
   },
-  activityTabActive: { backgroundColor: AdminColors.card },
+  activityTabActive: { backgroundColor: WaiterColors.card },
   activityTabText: { color: "#6B7280", marginRight: 8 },
   activityTabTextActive: {
     color: "#111827",
@@ -2031,3 +2061,4 @@ const styles = StyleSheet.create({
     color: "#4338CA",
   },
 });
+

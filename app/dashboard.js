@@ -42,6 +42,10 @@ export default function DashboardScreen() {
               router.replace("/waiter");
               return;
             }
+            if (parsed?.role === "kitchen" || parsed?.role === "chef") {
+              router.replace("/kitchen");
+              return;
+            }
           } catch (e) {
             console.warn("Failed to parse user role", e);
           }

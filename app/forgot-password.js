@@ -55,15 +55,23 @@ export default function ForgotPasswordScreen() {
     setIsLoading(true);
     setError("");
     try {
-      const res = await fetch(`${BASE_URL}/public/otp/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail }),
-      });
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Failed to send code");
+      const endpoints = ["/auth/forgot-password/request", "/public/otp/request"];
+      let sent = false;
+      for (const endpoint of endpoints) {
+        const res = await fetch(`${BASE_URL}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: trimmedEmail }),
+        });
+        if (res.status === 404 || res.status === 405) continue;
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || "Failed to send code");
+        }
+        sent = true;
+        break;
       }
+      if (!sent) throw new Error("Reset endpoint not available");
       router.push({ pathname: "/forgot-otp", params: { email: trimmedEmail } });
     } catch (err) {
       setError(err?.message || "Failed to send code");

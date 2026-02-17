@@ -252,11 +252,6 @@ const styles = StyleSheet.create({
   heroImage: {
     width: "100%",
     height: "100%",
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
   },
   bottomSection: {
     position: "absolute",

@@ -1,21 +1,29 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Image,
-  ImageBackground,
-  Share,
-  Platform,
-  RefreshControl,
-} from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Image,
+  ImageBackground,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import QRCode from "react-native-qrcode-svg";
+import AdminWavyHeader from "../../components/AdminWavyHeader";
 import { AdminColors, Fonts } from "../../constants/theme";
 import apiClient from "../../lib/apiClient";
 
@@ -72,6 +80,8 @@ export default function QrCodes() {
   const [tables, setTables] = useState<Table[]>([]);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [restaurantId, setRestaurantId] = useState<string>("");
+  const [restaurantName, setRestaurantName] = useState("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const [template, setTemplate] = useState("modern");
@@ -106,6 +116,19 @@ export default function QrCodes() {
       if (list.length > 0) setSelectedTable(list[0]);
       const rid = me?.restaurant_id || me?.restaurantId || me?.id || "";
       setRestaurantId(rid);
+      setRestaurantName(me.restaurant || "");
+
+      if (rid) {
+        try {
+          const res = await fetch(
+            `https://qrave-backend.onrender.com/public/restaurants/${rid}/logo`,
+          );
+          const data = await res.json();
+          if (data.logo_url) setLogoUrl(data.logo_url);
+        } catch {
+          setLogoUrl(null);
+        }
+      }
     } catch {
       // ignore for now
     }
@@ -193,12 +216,11 @@ export default function QrCodes() {
     const bgStyle = bgImage?.dataUrl
       ? `background-image:url('${bgImage.dataUrl}');background-size:cover;background-position:center;`
       : "";
-    const overlay =
-      bgImage?.dataUrl
-        ? `<div style="position:absolute;inset:0;background:${
-            template === "dark" ? "#000" : "#fff"
-          };opacity:${overlayOpacity / 100};"></div>`
-        : "";
+    const overlay = bgImage?.dataUrl
+      ? `<div style="position:absolute;inset:0;background:${
+          template === "dark" ? "#000" : "#fff"
+        };opacity:${overlayOpacity / 100};"></div>`
+      : "";
     const frame =
       template === "framed"
         ? `<div style="position:absolute;inset:16px;border:3px solid ${brandColor};border-radius:12px;"></div>`
@@ -323,7 +345,7 @@ export default function QrCodes() {
                 <div class="sub">${subheadline}</div>
                 ${
                   wifiSsid
-                    ? `<div style="margin-top:16px;font-size:11px;font-weight:700;">Free Wi‑Fi: ${wifiSsid}${
+                    ? `<div style="margin-top:16px;font-size:11px;font-weight:700;">Free Wi\u2011Fi: ${wifiSsid}${
                         wifiPass ? ` | ${wifiPass}` : ""
                       }</div>`
                     : ""
@@ -331,9 +353,7 @@ export default function QrCodes() {
                 <div class="footer">
                   <div>
                     <div>TABLE NUMBER</div>
-                    <div class="value">${getTableLabel(
-                      selectedTable,
-                    )}</div>
+                    <div class="value">${getTableLabel(selectedTable)}</div>
                   </div>
                   <div style="text-align:right;">
                     <div>ZONE</div>
@@ -392,377 +412,501 @@ export default function QrCodes() {
     setRefreshing(false);
   }, [loadData]);
 
+  /* ═══════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════ */
+
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={AdminColors.primary}
-        />
-      }
-    >
-      <Text style={styles.title}>QR Flyer Builder</Text>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Target Table</Text>
-        <Text style={styles.sectionHint}>
-          Select which table this QR code is for.
-        </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {tables.map((t) => {
-            const selected = selectedTable?.id === t.id;
-            return (
-              <TouchableOpacity
-                key={t.id || String(getTableNumber(t))}
-                style={[
-                  styles.tableChip,
-                  selected && styles.tableChipActive,
-                ]}
-                onPress={() => setSelectedTable(t)}
-              >
-                <Text
-                  style={[
-                    styles.tableChipText,
-                    selected && styles.tableChipTextActive,
-                  ]}
-                >
-                  {getTableLabel(t)}
-                </Text>
-                <Text
-                  style={[
-                    styles.tableChipSub,
-                    selected && styles.tableChipTextActive,
-                  ]}
-                >
-                  {t.zone || "Zone"}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Visual Design</Text>
-
-        <Text style={styles.subTitle}>Layout Style</Text>
-        <View style={styles.rowWrap}>
-          {templates.map((t) => (
-            <TouchableOpacity
-              key={t.id}
-              style={[
-                styles.choicePill,
-                template === t.id && styles.choicePillActive,
-              ]}
-              onPress={() => setTemplate(t.id)}
-            >
-              <Text
-                style={
-                  template === t.id
-                    ? styles.choiceTextActive
-                    : styles.choiceText
-                }
-              >
-                {t.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.subTitle}>Typography</Text>
-        <View style={styles.rowWrap}>
-          {fonts.map((f) => (
-            <TouchableOpacity
-              key={f.id}
-              style={[
-                styles.choicePill,
-                activeFont === f.id && styles.choicePillActive,
-              ]}
-              onPress={() => setActiveFont(f.id)}
-            >
-              <Text
-                style={[
-                  activeFont === f.id
-                    ? styles.choiceTextActive
-                    : styles.choiceText,
-                  { fontFamily: f.family },
-                ]}
-              >
-                Aa
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.subTitle}>Accent Color</Text>
-        <View style={styles.colorRow}>
-          {brandColors.map((c) => (
-            <TouchableOpacity
-              key={c}
-              style={[
-                styles.colorSwatch,
-                { backgroundColor: c },
-                brandColor === c && styles.colorSwatchActive,
-              ]}
-              onPress={() => setBrandColor(c)}
-            />
-          ))}
-        </View>
-
-        <Text style={styles.subTitle}>Background Image</Text>
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={styles.uploadBtn}
-            onPress={() => pickImage(setBgImage)}
-          >
-            <Text style={styles.uploadBtnText}>
-              {bgImage ? "Change Image" : "Upload Image"}
-            </Text>
-          </TouchableOpacity>
-          {bgImage ? (
-            <TouchableOpacity
-              style={styles.secondaryOutlineBtn}
-              onPress={() => setBgImage(null)}
-            >
-              <Text style={styles.secondaryOutlineText}>Remove</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-        {bgImage ? (
-          <View style={styles.overlayRow}>
-            <Text style={styles.overlayLabel}>Overlay Strength</Text>
-            <View style={styles.overlayControls}>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() =>
-                  setOverlayOpacity((o) => Math.max(0, o - 10))
-                }
-              >
-                <Text style={styles.stepText}>-</Text>
-              </TouchableOpacity>
-              <Text style={styles.overlayValue}>{overlayOpacity}%</Text>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() =>
-                  setOverlayOpacity((o) => Math.min(90, o + 10))
-                }
-              >
-                <Text style={styles.stepText}>+</Text>
-              </TouchableOpacity>
-            </View>
+    <View style={styles.screen}>
+      {/* ── WAVY HEADER ── */}
+      <AdminWavyHeader height={160}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.profileAvatar}>
+            {logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={styles.profileImage} />
+            ) : (
+              <Text style={{ fontSize: 24 }}>{"\uD83C\uDFEA"}</Text>
+            )}
           </View>
-        ) : null}
-
-        <Text style={styles.subTitle}>Brand Logo</Text>
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={styles.uploadBtn}
-            onPress={() => pickImage(setLogoImage)}
-          >
-            <Text style={styles.uploadBtnText}>
-              {logoImage ? "Change Logo" : "Choose File"}
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>QR Flyer Builder</Text>
+            <Text style={styles.headerSubtitle}>
+              Design &amp; Print Table QRs
             </Text>
-          </TouchableOpacity>
-          {logoImage ? (
+          </View>
+        </View>
+      </AdminWavyHeader>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={AdminColors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── TARGET TABLE ── */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIconBg}>
+              <MaterialIcons
+                name="table-restaurant"
+                size={20}
+                color="#F59E0B"
+              />
+            </View>
+            <Text style={styles.cardTitle}>Target Table</Text>
+          </View>
+          <Text style={styles.sectionHint}>
+            Select which table this QR code is for.
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {tables.map((t) => {
+              const selected = selectedTable?.id === t.id;
+              return (
+                <TouchableOpacity
+                  key={t.id || String(getTableNumber(t))}
+                  style={[styles.tableChip, selected && styles.tableChipActive]}
+                  onPress={() => setSelectedTable(t)}
+                >
+                  <Text
+                    style={[
+                      styles.tableChipText,
+                      selected && styles.tableChipTextActive,
+                    ]}
+                  >
+                    {getTableLabel(t)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.tableChipSub,
+                      selected && styles.tableChipTextActive,
+                    ]}
+                  >
+                    {t.zone || "Zone"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* ── VISUAL DESIGN ── */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIconBg}>
+              <MaterialIcons name="palette" size={20} color="#8B5CF6" />
+            </View>
+            <Text style={styles.cardTitle}>Visual Design</Text>
+          </View>
+
+          <Text style={styles.subTitle}>Layout Style</Text>
+          <View style={styles.rowWrap}>
+            {templates.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={[
+                  styles.layoutOption,
+                  template === t.id && styles.layoutOptionActive,
+                ]}
+                onPress={() => setTemplate(t.id)}
+              >
+                <Text
+                  style={
+                    template === t.id
+                      ? styles.layoutTextActive
+                      : styles.layoutText
+                  }
+                >
+                  {t.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.subTitle}>Typography</Text>
+          <View style={styles.rowWrap}>
+            {fonts.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[
+                  styles.choicePill,
+                  activeFont === f.id && styles.choicePillActive,
+                ]}
+                onPress={() => setActiveFont(f.id)}
+              >
+                <Text
+                  style={[
+                    activeFont === f.id
+                      ? styles.choiceTextActive
+                      : styles.choiceText,
+                    { fontFamily: f.family },
+                  ]}
+                >
+                  Aa
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.subTitle}>Accent Color</Text>
+          <View style={styles.colorRow}>
+            {brandColors.map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={[
+                  styles.colorSwatch,
+                  { backgroundColor: c },
+                  brandColor === c && styles.colorSwatchActive,
+                ]}
+                onPress={() => setBrandColor(c)}
+              />
+            ))}
+          </View>
+
+          <Text style={styles.subTitle}>Background Image</Text>
+          <View style={styles.row}>
             <TouchableOpacity
-              style={styles.secondaryOutlineBtn}
-              onPress={() => setLogoImage(null)}
+              style={styles.uploadBtn}
+              onPress={() => pickImage(setBgImage)}
             >
-              <Text style={styles.secondaryOutlineText}>Clear</Text>
+              <Text style={styles.uploadBtnText}>
+                {bgImage ? "Change Image" : "Upload Image"}
+              </Text>
             </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Text & Content</Text>
-        <Text style={styles.subTitle}>Main Headline</Text>
-        <TextInput
-          style={styles.input}
-          value={headline}
-          onChangeText={setHeadline}
-        />
-        <Text style={styles.subTitle}>Sub-Headline</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={subheadline}
-          onChangeText={setSubheadline}
-          multiline
-        />
-        <Text style={styles.subTitle}>Wi-Fi Details (Optional)</Text>
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.flex]}
-            placeholder="Network Name"
-            value={wifiSsid}
-            onChangeText={setWifiSsid}
-          />
-          <TextInput
-            style={[styles.input, styles.flex]}
-            placeholder="Password"
-            value={wifiPass}
-            onChangeText={setWifiPass}
-          />
-        </View>
-      </View>
-
-      <View style={styles.previewWrap}>
-        <View style={styles.previewBadge}>
-          <Text style={styles.previewBadgeText}>Live Preview</Text>
-        </View>
-
-        <ImageBackground
-          nativeID="printable-area"
-          source={bgImage ? { uri: bgImage.uri } : undefined}
-          style={styles.previewCard}
-          imageStyle={styles.previewImage}
-        >
+            {bgImage ? (
+              <TouchableOpacity
+                style={styles.secondaryOutlineBtn}
+                onPress={() => setBgImage(null)}
+              >
+                <Text style={styles.secondaryOutlineText}>Remove</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           {bgImage ? (
-            <View
-              style={[
-                styles.overlay,
-                {
-                  backgroundColor: template === "dark" ? "#000" : "#fff",
-                  opacity: overlayOpacity / 100,
-                },
-              ]}
-            />
-          ) : null}
-          {template === "framed" ? (
-            <View
-              style={[styles.frame, { borderColor: brandColor }]}
-              pointerEvents="none"
-            />
+            <View style={styles.overlayRow}>
+              <Text style={styles.overlayLabel}>Overlay Strength</Text>
+              <View style={styles.overlayControls}>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => setOverlayOpacity((o) => Math.max(0, o - 10))}
+                >
+                  <Text style={styles.stepText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.overlayValue}>{overlayOpacity}%</Text>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => setOverlayOpacity((o) => Math.min(90, o + 10))}
+                >
+                  <Text style={styles.stepText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ) : null}
 
-          <View style={styles.previewContent}>
-            <View style={styles.previewLogo}>
+          <Text style={styles.subTitle}>Brand Logo</Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={styles.uploadBtn}
+              onPress={() => pickImage(setLogoImage)}
+            >
+              <Text style={styles.uploadBtnText}>
+                {logoImage ? "Change Logo" : "Choose File"}
+              </Text>
+            </TouchableOpacity>
+            {logoImage ? (
+              <TouchableOpacity
+                style={styles.secondaryOutlineBtn}
+                onPress={() => setLogoImage(null)}
+              >
+                <Text style={styles.secondaryOutlineText}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        {/* ── TEXT & CONTENT ── */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIconBg}>
+              <MaterialIcons name="edit" size={20} color="#3B82F6" />
+            </View>
+            <Text style={styles.cardTitle}>Text &amp; Content</Text>
+          </View>
+          <Text style={styles.subTitle}>Main Headline</Text>
+          <TextInput
+            style={styles.input}
+            value={headline}
+            onChangeText={setHeadline}
+          />
+          <Text style={styles.subTitle}>Sub-Headline</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={subheadline}
+            onChangeText={setSubheadline}
+            multiline
+          />
+          <Text style={styles.subTitle}>Wi-Fi Details (Optional)</Text>
+          <View style={styles.row}>
+            <TextInput
+              style={[styles.input, styles.flex]}
+              placeholder="Network Name"
+              value={wifiSsid}
+              onChangeText={setWifiSsid}
+            />
+            <TextInput
+              style={[styles.input, styles.flex]}
+              placeholder="Password"
+              value={wifiPass}
+              onChangeText={setWifiPass}
+            />
+          </View>
+        </View>
+
+        {/* ── LIVE PREVIEW ── */}
+        <View style={styles.previewWrap}>
+          <View style={styles.previewBadge}>
+            <Text style={styles.previewBadgeText}>Live Preview</Text>
+          </View>
+
+          <ImageBackground
+            nativeID="printable-area"
+            source={bgImage ? { uri: bgImage.uri } : undefined}
+            style={styles.previewCard}
+            imageStyle={styles.previewImage}
+          >
+            {bgImage ? (
+              <View
+                style={[
+                  styles.overlay,
+                  {
+                    backgroundColor: template === "dark" ? "#000" : "#fff",
+                    opacity: overlayOpacity / 100,
+                  },
+                ]}
+              />
+            ) : null}
+            {template === "framed" ? (
+              <View
+                style={[styles.frame, { borderColor: brandColor }]}
+                pointerEvents="none"
+              />
+            ) : null}
+
+            <View style={styles.previewContent}>
+              <View style={styles.previewLogo}>
                 {logoImage ? (
                   <Image
                     source={{ uri: logoImage.uri }}
                     style={styles.logoImage}
                   />
                 ) : (
-                <Text style={[styles.logoText, { color: cardText }]}>NOIR.</Text>
-              )}
-            </View>
-
-            <View
-              style={[
-                styles.qrBox,
-                template === "dark" && styles.qrBoxDark,
-              ]}
-            >
-              {qrValue ? (
-                <QRCode
-                  value={qrValue}
-                  size={200}
-                  color={template === "dark" ? "#ffffff" : "#000000"}
-                  backgroundColor="transparent"
-                  getRef={(c) => {
-                    qrRef.current = c;
-                  }}
-                />
-              ) : (
-                <Text style={styles.emptyQrText}>Select a table to preview</Text>
-              )}
-              <View style={[styles.scanBadge, { backgroundColor: brandColor }]}>
-                <Text style={styles.scanBadgeText}>SCAN ME</Text>
+                  <Text style={[styles.logoText, { color: cardText }]}>
+                    NOIR.
+                  </Text>
+                )}
               </View>
-            </View>
-            {/* Hidden QR generator to ensure dataURL for PDF */}
-            {qrValue ? (
-              <View style={styles.hiddenQr}>
-                <QRCode
-                  value={qrValue}
-                  size={200}
-                  color={template === "dark" ? "#ffffff" : "#000000"}
-                  backgroundColor="transparent"
-                  getRef={(c) => {
-                    printQrRef.current = c;
-                  }}
-                />
-              </View>
-            ) : null}
 
-            <View style={styles.previewTextBlock}>
-              <Text
-                style={[
-                  styles.previewHeadline,
-                  { color: template === "modern" ? brandColor : cardText },
-                  { fontFamily },
-                ]}
-              >
-                {headline}
-              </Text>
-              <Text
-                style={[
-                  styles.previewSubheadline,
-                  { color: template === "dark" ? "#d1d5db" : "#6b7280" },
-                  { fontFamily },
-                ]}
-              >
-                {subheadline}
-              </Text>
-            </View>
-
-            {wifiSsid ? (
               <View
-                style={[
-                  styles.wifiBadge,
-                  template === "dark" && styles.wifiBadgeDark,
-                ]}
+                style={[styles.qrBox, template === "dark" && styles.qrBoxDark]}
               >
-                <Text style={styles.wifiLabel}>Free Wi-Fi</Text>
-                <Text style={styles.wifiValue}>
-                  {wifiSsid}
-                  {wifiPass ? ` | ${wifiPass}` : ""}
-                </Text>
+                {qrValue ? (
+                  <QRCode
+                    value={qrValue}
+                    size={200}
+                    color={template === "dark" ? "#ffffff" : "#000000"}
+                    backgroundColor="transparent"
+                    getRef={(c) => {
+                      qrRef.current = c;
+                    }}
+                  />
+                ) : (
+                  <Text style={styles.emptyQrText}>
+                    Select a table to preview
+                  </Text>
+                )}
+                <View
+                  style={[styles.scanBadge, { backgroundColor: brandColor }]}
+                >
+                  <Text style={styles.scanBadgeText}>SCAN ME</Text>
+                </View>
               </View>
-            ) : null}
 
-            <View style={styles.previewFooter}>
-              <View>
-                <Text style={styles.footerLabel}>Table Number</Text>
-                <Text style={styles.footerValue}>
-                  {getTableLabel(selectedTable)}
+              {/* Hidden QR generator for PDF */}
+              {qrValue ? (
+                <View style={styles.hiddenQr}>
+                  <QRCode
+                    value={qrValue}
+                    size={200}
+                    color="#000000"
+                    backgroundColor="transparent"
+                    getRef={(c) => {
+                      printQrRef.current = c;
+                    }}
+                  />
+                </View>
+              ) : null}
+
+              <View style={styles.previewTextBlock}>
+                <Text
+                  style={[
+                    styles.previewHeadline,
+                    {
+                      color: template === "modern" ? brandColor : cardText,
+                    },
+                    { fontFamily },
+                  ]}
+                >
+                  {headline}
+                </Text>
+                <Text
+                  style={[
+                    styles.previewSubheadline,
+                    {
+                      color: template === "dark" ? "#d1d5db" : "#6b7280",
+                    },
+                    { fontFamily },
+                  ]}
+                >
+                  {subheadline}
                 </Text>
               </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.footerLabel}>Zone</Text>
-                <Text style={styles.footerZone}>
-                  {selectedTable?.zone || "-"}
-                </Text>
+
+              {wifiSsid ? (
+                <View
+                  style={[
+                    styles.wifiBadge,
+                    template === "dark" && styles.wifiBadgeDark,
+                  ]}
+                >
+                  <Text style={styles.wifiLabel}>Free Wi-Fi</Text>
+                  <Text style={styles.wifiValue}>
+                    {wifiSsid}
+                    {wifiPass ? ` | ${wifiPass}` : ""}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={styles.previewFooter}>
+                <View>
+                  <Text style={styles.footerLabel}>Table Number</Text>
+                  <Text style={styles.footerValue}>
+                    {getTableLabel(selectedTable)}
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={styles.footerLabel}>Zone</Text>
+                  <Text style={styles.footerZone}>
+                    {selectedTable?.zone || "-"}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
-        </ImageBackground>
-      </View>
+          </ImageBackground>
+        </View>
 
-      <TouchableOpacity style={styles.printBtn} onPress={handlePrint}>
-        <Text style={styles.printBtnText}>Print Flyer</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity style={styles.printBtn} onPress={handlePrint}>
+          <Text style={styles.printBtnText}>Download / Print Flyer</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
+/* ═══════════════════════════════════════════════════
+   STYLES
+   ═══════════════════════════════════════════════════ */
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: AdminColors.background },
-  container: { padding: 16, paddingBottom: 36 },
-  title: { fontSize: 20, fontWeight: "700", marginBottom: 12 },
-  section: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#eef2f7",
+  screen: { flex: 1, backgroundColor: "#F9FAFB" },
+  scroll: { flex: 1 },
+  container: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+    paddingTop: 24,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 6 },
-  sectionHint: { fontSize: 12, color: "#6b7280", marginBottom: 8 },
+
+  /* HEADER */
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    width: "100%",
+  },
+  profileAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginRight: 12,
+  },
+  profileImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: "#FEF3C7",
+  },
+  headerCenter: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#111827",
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "#4B5563",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
+  /* CARD */
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  sectionIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  sectionHint: { fontSize: 13, color: "#6b7280", marginBottom: 12 },
   subTitle: { fontSize: 12, fontWeight: "700", marginTop: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
@@ -776,40 +920,111 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   textArea: { height: 70, textAlignVertical: "top" },
+
+  /* TABLE CHIPS */
   tableChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginRight: 8,
+    width: 72,
+    height: 72,
+    justifyContent: "center",
     alignItems: "center",
-    minWidth: 56,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    marginRight: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  tableChipActive: { backgroundColor: "#111827", borderColor: "#111827" },
-  tableChipText: { fontWeight: "700", color: "#111827" },
-  tableChipTextActive: { color: "#fff" },
-  tableChipSub: { fontSize: 10, color: "#6b7280" },
+  tableChipActive: {
+    backgroundColor: "#111827",
+    borderColor: "#111827",
+    transform: [{ scale: 1.05 }],
+  },
+  tableChipText: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 4,
+  },
+  tableChipTextActive: {
+    color: "#FFF",
+  },
+  tableChipSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
+  },
+
+  /* LAYOUT OPTIONS */
+  layoutOption: {
+    width: "31%",
+    aspectRatio: 1.5,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    marginBottom: 8,
+  },
+  layoutOptionActive: {
+    backgroundColor: "#111827",
+    borderColor: "#111827",
+  },
+  layoutText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4B5563",
+    textAlign: "center",
+    paddingHorizontal: 4,
+  },
+  layoutTextActive: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFF",
+    textAlign: "center",
+    paddingHorizontal: 4,
+  },
+
+  /* TYPOGRAPHY / ACCENT */
   choicePill: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     backgroundColor: "#fff",
+    marginRight: 8,
+    marginBottom: 8,
   },
   choicePillActive: { backgroundColor: "#111827", borderColor: "#111827" },
-  choiceText: { fontSize: 12, color: "#6b7280", fontWeight: "700" },
-  choiceTextActive: { fontSize: 12, color: "#fff", fontWeight: "700" },
-  colorRow: { flexDirection: "row", gap: 10, marginTop: 8 },
+  choiceText: { fontSize: 13, color: "#4B5563", fontWeight: "600" },
+  choiceTextActive: { fontSize: 13, color: "#fff", fontWeight: "700" },
+  colorRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginTop: 12,
+    flexWrap: "wrap",
+  },
   colorSwatch: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 2,
     borderColor: "transparent",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  colorSwatchActive: { borderColor: "#fff", shadowColor: "#000", elevation: 2 },
+  colorSwatchActive: {
+    borderColor: "#fff",
+    shadowColor: "#000",
+    elevation: 2,
+  },
   uploadBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -844,6 +1059,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepText: { fontWeight: "700" },
+
+  /* PREVIEW */
   previewWrap: {
     backgroundColor: "#f3f4f6",
     borderRadius: 16,

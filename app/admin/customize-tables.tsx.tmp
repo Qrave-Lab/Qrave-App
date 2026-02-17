@@ -959,7 +959,7 @@ export default function CustomizeTables() {
   return (
     <View style={styles.mainContainer}>
       {/* â”€â”€ Wavy Header â”€â”€ */}
-      <AdminWavyHeader height={160}>
+      <AdminWavyHeader height={180}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.profileAvatar}
@@ -1068,26 +1068,6 @@ export default function CustomizeTables() {
             <Text style={styles.metricNum}>0</Text>
             <Text style={styles.metricLabel}>Long Sit</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchBarWrap}>
-          <View style={styles.searchBar}>
-            <MaterialIcons name="search" size={20} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search tables..."
-              placeholderTextColor="#9CA3AF"
-              value={search}
-              onChangeText={setSearch}
-            />
-            <TouchableOpacity
-              style={styles.searchTuneBtn}
-              onPress={() => setSortMenuOpen(!sortMenuOpen)}
-            >
-              <MaterialIcons name="tune" size={18} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* â”€â”€ Sort Pills (toggle) â”€â”€ */}

@@ -1,23 +1,25 @@
+import { MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
   Image,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Switch,
   Modal,
   RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import apiClient, { api as namedApi } from "../../lib/apiClient";
-
-// Placeholder images
 import iconPng from "../../assets/images/icon.png";
+import AdminWavyHeader from "../../components/AdminWavyHeader";
+import { AdminColors } from "../../constants/theme";
+import apiClient, { api as namedApi } from "../../lib/apiClient";
 
 export default function AdminProfile() {
   const router = useRouter();
@@ -28,6 +30,8 @@ export default function AdminProfile() {
   const [phone, setPhone] = useState("");
   const [tax, setTax] = useState("");
   const [serviceCharge, setServiceCharge] = useState("");
+  const [openTime, setOpenTime] = useState("");
+  const [closeTime, setCloseTime] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [tables, setTables] = useState<any[]>([]);
   const [tablesLoading, setTablesLoading] = useState(false);
@@ -54,13 +58,18 @@ export default function AdminProfile() {
   });
   const [refreshing, setRefreshing] = useState(false);
 
+  /* ───── helpers ───── */
+
   const resolveTableLabel = (t: any) =>
     t?.table_number || t?.number || t?.name || t?.id || t?.tableID || "Table";
 
   const resolveTableId = (t: any) => t?.id || t?.tableID || t?.table_id;
 
   const resolveEnabled = (t: any) =>
-    t?.is_enabled !== undefined ? t.is_enabled : t?.enabled ?? t?.active ?? true;
+    t?.is_enabled !== undefined
+      ? t.is_enabled
+      : (t?.enabled ?? t?.active ?? true);
+
   const isArchived = (t: any) =>
     t?.is_archived === true ||
     t?.archived === true ||
@@ -77,10 +86,39 @@ export default function AdminProfile() {
       email || "user",
     )}`;
 
+  const normalizeTimeValue = (value: string) => {
+    const raw = value.trim();
+    if (!raw) return "";
+
+    const twentyFourHour = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+    const twelveHour = /^(0?[1-9]|1[0-2]):([0-5]\d)\s*(AM|PM)$/i;
+
+    const twentyFourMatch = raw.match(twentyFourHour);
+    if (twentyFourMatch) {
+      return `${twentyFourMatch[1].padStart(2, "0")}:${twentyFourMatch[2]}`;
+    }
+
+    const twelveHourMatch = raw.match(twelveHour);
+    if (!twelveHourMatch) return null;
+
+    let hours = parseInt(twelveHourMatch[1], 10);
+    const minutes = twelveHourMatch[2];
+    const meridiem = twelveHourMatch[3].toUpperCase();
+
+    if (meridiem === "AM") {
+      if (hours === 12) hours = 0;
+    } else if (hours !== 12) {
+      hours += 12;
+    }
+
+    return `${String(hours).padStart(2, "0")}:${minutes}`;
+  };
+
+  /* ───── data loading ───── */
+
   const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      // Always try to fetch from backend first
       const profile = await apiClient.get("/api/admin/me");
       setUser(profile);
       setRestaurant(profile.restaurant || "");
@@ -88,13 +126,14 @@ export default function AdminProfile() {
       setPhone(profile.phone || "");
       setTax(profile.tax_percent ? String(profile.tax_percent) : "");
       setServiceCharge(
-        profile.service_charge ? String(profile.service_charge) : ""
+        profile.service_charge ? String(profile.service_charge) : "",
       );
-      // Fetch logo URL if restaurant_id exists
+      setOpenTime(profile.open_time || "");
+      setCloseTime(profile.close_time || "");
       if (profile.restaurant_id) {
         try {
           const res = await fetch(
-            `https://qrave-backend.onrender.com/public/restaurants/${profile.restaurant_id}/logo`
+            `https://qrave-backend.onrender.com/public/restaurants/${profile.restaurant_id}/logo`,
           );
           const data = await res.json();
           if (data.logo_url) setLogoUrl(data.logo_url);
@@ -105,7 +144,6 @@ export default function AdminProfile() {
         setLogoUrl(null);
       }
     } catch {
-      // fallback to AsyncStorage if backend fails
       const userStr = await AsyncStorage.getItem("user");
       if (userStr) {
         const fallback = JSON.parse(userStr);
@@ -115,12 +153,14 @@ export default function AdminProfile() {
         setPhone(fallback.phone || "");
         setTax(fallback.tax_percent ? String(fallback.tax_percent) : "");
         setServiceCharge(
-          fallback.service_charge ? String(fallback.service_charge) : ""
+          fallback.service_charge ? String(fallback.service_charge) : "",
         );
+        setOpenTime(fallback.open_time || "");
+        setCloseTime(fallback.close_time || "");
         if (fallback.restaurant_id) {
           try {
             const res = await fetch(
-              `https://qrave-backend.onrender.com/public/restaurants/${fallback.restaurant_id}/logo`
+              `https://qrave-backend.onrender.com/public/restaurants/${fallback.restaurant_id}/logo`,
             );
             const data = await res.json();
             if (data.logo_url) setLogoUrl(data.logo_url);
@@ -175,11 +215,13 @@ export default function AdminProfile() {
     loadStaff();
   }, [loadStaff]);
 
+  /* ───── table handlers ───── */
+
   const handleAddTable = async () => {
     const existing = new Set(
       tables
         .map((t) => Number(t?.table_number ?? t?.number))
-        .filter((n) => !isNaN(n) && n > 0)
+        .filter((n) => !isNaN(n) && n > 0),
     );
     let nextNumber = 1;
     while (existing.has(nextNumber)) nextNumber += 1;
@@ -214,8 +256,8 @@ export default function AdminProfile() {
         prev.map((t) =>
           resolveTableId(t) === tableId
             ? { ...t, is_enabled: nextEnabled, enabled: nextEnabled }
-            : t
-        )
+            : t,
+        ),
       );
     } catch (e: any) {
       alert(e?.message || "Failed to update table");
@@ -232,6 +274,8 @@ export default function AdminProfile() {
       alert(e?.message || "Failed to remove table");
     }
   };
+
+  /* ───── staff handlers ───── */
 
   const handleRemoveStaff = async (member: any) => {
     const staffId = resolveStaffId(member);
@@ -302,9 +346,7 @@ export default function AdminProfile() {
       const status = e?.status ? ` (status ${e.status})` : "";
       const detail = e?.body?.message || e?.body?.error;
       alert(
-        detail
-          ? `Update failed${status}: ${detail}`
-          : `Update failed${status}`,
+        detail ? `Update failed${status}: ${detail}` : `Update failed${status}`,
       );
     } finally {
       setEditingStaff(false);
@@ -323,7 +365,10 @@ export default function AdminProfile() {
     }
     setAddingStaff(true);
     try {
-      await apiClient.post(`/api/admin/restaurants/${restaurantId}/staff`, newStaff);
+      await apiClient.post(
+        `/api/admin/restaurants/${restaurantId}/staff`,
+        newStaff,
+      );
       const res = await apiClient.get("/api/admin/staffs");
       setStaff(Array.isArray(res) ? res : []);
       setAddStaffOpen(false);
@@ -335,36 +380,41 @@ export default function AdminProfile() {
     }
   };
 
+  /* ───── save handler (preserves openTime / closeTime) ───── */
+
   const handleSave = async () => {
     const client = apiClient || namedApi;
     if (!user) return;
 
     try {
-      // Prepare payload
+      const normalizedOpenTime = normalizeTimeValue(openTime);
+      if (normalizedOpenTime === null) {
+        alert("Invalid opening time. Use HH:MM or HH:MM AM/PM.");
+        return;
+      }
+
+      const normalizedCloseTime = normalizeTimeValue(closeTime);
+      if (normalizedCloseTime === null) {
+        alert("Invalid closing time. Use HH:MM or HH:MM AM/PM.");
+        return;
+      }
+
       const payload: Record<string, any> = {
         name: restaurant?.trim() || undefined,
         address: address?.trim() || undefined,
         phone: phone?.trim() || undefined,
         tax_percent: tax ? parseInt(tax) : undefined,
         service_charge: serviceCharge ? parseInt(serviceCharge) : undefined,
+        open_time: normalizedOpenTime || undefined,
+        close_time: normalizedCloseTime || undefined,
       };
 
-      // Remove fields that are undefined
       Object.keys(payload).forEach(
-        (key) => payload[key] === undefined && delete payload[key]
+        (key) => payload[key] === undefined && delete payload[key],
       );
 
       console.log("Updating restaurant with:", payload);
-
-      // Debug: log the full request and response
-      console.log(
-        "Sending PATCH request to /api/admin/update-details with payload:",
-        payload
-      );
-      const response = await client.patch(
-        "/api/admin/update-details",
-        payload
-      );
+      const response = await client.patch("/api/admin/update-details", payload);
       console.log("Update response:", response);
 
       alert("Profile updated successfully!");
@@ -372,7 +422,7 @@ export default function AdminProfile() {
       console.error("Update failed:", e.response || e);
       alert(
         "Failed to update profile. " +
-          (e.response?.data?.message || "Please try again.")
+          (e.response?.data?.message || "Please try again."),
       );
     }
   };
@@ -382,6 +432,8 @@ export default function AdminProfile() {
     await Promise.all([loadProfile(), loadTables(), loadStaff()]);
     setRefreshing(false);
   }, [loadProfile, loadTables, loadStaff]);
+
+  /* ───── loading state ───── */
 
   if (loading) {
     return (
@@ -396,134 +448,311 @@ export default function AdminProfile() {
     );
   }
 
+  /* ═══════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════ */
+
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor="#0a84ff"
-        />
-      }
-    >
-      <Text style={styles.title}>Profile</Text>
-      <View style={styles.card}>
-        <View style={styles.avatarRow}>
-          {logoUrl ? (
-            <Image source={{ uri: logoUrl }} style={styles.avatar} />
-          ) : (
-            <Image source={iconPng} style={styles.avatar} />
-          )}
-          <View style={{ flex: 1, marginLeft: 16 }}>
-            <TextInput
-              style={styles.input}
-              value={restaurant}
-              onChangeText={setRestaurant}
-              placeholder="Restaurant Name"
-              editable
-            />
-            <Text style={styles.email}>{user?.email}</Text>
+    <View style={styles.container}>
+      <StatusBar style="dark" />
+      <AdminWavyHeader height={160}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.profileAvatar}>
+            {logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={styles.profileImage} />
+            ) : (
+              <Image source={iconPng} style={styles.profileImage} />
+            )}
+          </View>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>
+              {restaurant || "My Restaurant"}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {user?.email || "Manage your business"}
+            </Text>
           </View>
         </View>
-        <TextInput
-          style={styles.input}
-          value={address}
-          onChangeText={setAddress}
-          placeholder="Business Address"
-          editable
-        />
-        <TextInput
-          style={styles.input}
-          value={phone}
-          onChangeText={setPhone}
-          placeholder="Phone Number"
-          keyboardType="phone-pad"
-          editable
-        />
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, { flex: 1, marginRight: 8 }]}
-            value={tax}
-            onChangeText={setTax}
-            placeholder="Tax Rate (%)"
-            keyboardType="numeric"
-            editable
-          />
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
-            value={serviceCharge}
-            onChangeText={setServiceCharge}
-            placeholder="Service Charge (%)"
-            keyboardType="numeric"
-            editable
-          />
-        </View>
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>Save Changes</Text>
-        </TouchableOpacity>
-      </View>
+      </AdminWavyHeader>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Team Members</Text>
-          <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={() => setAddStaffOpen(true)}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={AdminColors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── RESTAURANT DETAILS ── */}
+        <View style={styles.card}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
           >
-            <Text style={styles.secondaryBtnText}>+ Add New</Text>
+            <View style={styles.sectionIconBg}>
+              <MaterialIcons name="store" size={20} color="#F59E0B" />
+            </View>
+            <Text style={styles.cardTitle}>Restaurant Details</Text>
+          </View>
+
+          <Text style={styles.inputLabel}>Restaurant Name</Text>
+          <TextInput
+            style={styles.input}
+            value={restaurant}
+            onChangeText={setRestaurant}
+            placeholder="Restaurant Name"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          <Text style={styles.inputLabel}>Address</Text>
+          <TextInput
+            style={styles.input}
+            value={address}
+            onChangeText={setAddress}
+            placeholder="Business Address"
+            placeholderTextColor="#9CA3AF"
+          />
+
+          <Text style={styles.inputLabel}>Phone</Text>
+          <TextInput
+            style={styles.input}
+            value={phone}
+            onChangeText={setPhone}
+            placeholder="Phone Number"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="phone-pad"
+          />
+
+          <View style={styles.row}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={styles.inputLabel}>Tax %</Text>
+              <TextInput
+                style={styles.input}
+                value={tax}
+                onChangeText={setTax}
+                placeholder="0"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inputLabel}>Svc Charge %</Text>
+              <TextInput
+                style={styles.input}
+                value={serviceCharge}
+                onChangeText={setServiceCharge}
+                placeholder="0"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={styles.inputLabel}>Opens At</Text>
+              <TextInput
+                style={styles.input}
+                value={openTime}
+                onChangeText={setOpenTime}
+                placeholder="HH:MM"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inputLabel}>Closes At</Text>
+              <TextInput
+                style={styles.input}
+                value={closeTime}
+                onChangeText={setCloseTime}
+                placeholder="HH:MM"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+            <Text style={styles.saveBtnText}>Save Changes</Text>
           </TouchableOpacity>
         </View>
-        {staffLoading ? (
-          <Text style={styles.mutedText}>Loading team members...</Text>
-        ) : staffError ? (
-          <Text style={styles.errorText}>{staffError}</Text>
-        ) : staff.length === 0 ? (
-          <Text style={styles.mutedText}>No team members onboarded yet.</Text>
-        ) : (
-          staff.map((member) => (
-            <View key={resolveStaffId(member)} style={styles.memberCard}>
-              <View style={styles.memberAvatar}>
+
+        {/* ── TEAM MEMBERS ── */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+            >
+              <View style={styles.sectionIconBg}>
+                <MaterialIcons name="people" size={20} color="#3B82F6" />
+              </View>
+              <Text style={styles.cardTitle}>Team Members</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => setAddStaffOpen(true)}
+            >
+              <Text style={styles.secondaryBtnText}>+ Add New</Text>
+            </TouchableOpacity>
+          </View>
+
+          {staffLoading ? (
+            <Text style={styles.mutedText}>Loading team...</Text>
+          ) : staffError ? (
+            <Text style={styles.errorText}>{staffError}</Text>
+          ) : staff.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No team members found</Text>
+            </View>
+          ) : (
+            staff.map((member) => (
+              <View key={resolveStaffId(member)} style={styles.memberCard}>
                 <Image
                   source={{ uri: getStaffAvatar(resolveStaffEmail(member)) }}
-                  style={styles.avatar}
+                  style={styles.avatarSmall}
+                />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.memberName}>
+                    {resolveStaffEmail(member)
+                      ? resolveStaffEmail(member).split("@")[0]
+                      : "Member"}
+                  </Text>
+                  <Text style={styles.memberRole}>
+                    {String(resolveStaffRole(member)).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.memberActions}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => handleOpenEditStaff(member)}
+                  >
+                    <MaterialIcons name="edit" size={18} color="#4B5563" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: "#FEF2F2" }]}
+                    onPress={() => handleRemoveStaff(member)}
+                  >
+                    <MaterialIcons name="delete" size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* ── TABLES ── */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+            >
+              <View style={styles.sectionIconBg}>
+                <MaterialIcons
+                  name="table-restaurant"
+                  size={20}
+                  color="#10B981"
                 />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>
-                  {resolveStaffEmail(member)
-                    ? resolveStaffEmail(member).split("@")[0]
-                    : "Member"}
-                </Text>
-                <Text style={styles.email}>{resolveStaffEmail(member)}</Text>
-              </View>
-              <View style={styles.memberActions}>
-                <Text style={styles.role}>
-                  {String(resolveStaffRole(member)).toUpperCase()}
-                </Text>
-                <TouchableOpacity
-                  style={styles.editBtn}
-                  onPress={() => handleOpenEditStaff(member)}
-                >
-                  <Text style={styles.editBtnText}>✏️</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleRemoveStaff(member)}
-                >
-                  <Text style={styles.deleteBtnText}>Remove</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.cardTitle}>Tables</Text>
             </View>
-          ))
-        )}
-      </View>
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={handleAddTable}
+            >
+              <Text style={styles.secondaryBtnText}>+ Add Table</Text>
+            </TouchableOpacity>
+          </View>
 
+          {tablesLoading ? (
+            <Text style={styles.mutedText}>Loading tables...</Text>
+          ) : tablesError ? (
+            <Text style={styles.errorText}>{tablesError}</Text>
+          ) : (
+            tables.map((t) => (
+              <View
+                key={resolveTableId(t) || resolveTableLabel(t)}
+                style={styles.tableRow}
+              >
+                <Text style={styles.tableLabel}>{resolveTableLabel(t)}</Text>
+                <View style={styles.tableActions}>
+                  <Switch
+                    trackColor={{ false: "#E5E7EB", true: "#FCD34D" }}
+                    thumbColor={resolveEnabled(t) ? "#F59E0B" : "#F3F4F6"}
+                    value={!!resolveEnabled(t)}
+                    onValueChange={() => handleToggleTable(t)}
+                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                  />
+                  <TouchableOpacity
+                    style={styles.deleteTableBtn}
+                    onPress={() => handleDeleteTable(t)}
+                  >
+                    <Text style={styles.deleteTableText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* ── DEVICES ── */}
+        <View style={styles.card}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <View style={styles.sectionIconBg}>
+              <MaterialIcons name="devices" size={20} color="#6366F1" />
+            </View>
+            <Text style={styles.cardTitle}>Devices & Setup</Text>
+          </View>
+
+          <View style={styles.deviceRow}>
+            <View style={[styles.deviceCard, { marginRight: 12 }]}>
+              <Text style={styles.deviceIcon}>&#x1F5A8;&#xFE0F;</Text>
+              <Text style={styles.deviceName}>Printer</Text>
+              <Text style={styles.deviceStatus}>Connected</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.deviceCard}
+              onPress={() => router.push("/admin/qr-codes")}
+            >
+              <Text style={styles.deviceIcon}>&#x1F4F1;</Text>
+              <Text style={styles.deviceName}>QR Codes</Text>
+              <Text style={styles.deviceStatus}>Generate</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── LOGOUT ── */}
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={async () => {
+            await AsyncStorage.removeItem("user");
+            await AsyncStorage.removeItem("token");
+            await AsyncStorage.removeItem("qrave_jwt");
+            router.replace("/");
+          }}
+        >
+          <Text style={styles.logoutBtnText}>Log Out</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* ════════════  ADD STAFF MODAL  ════════════ */}
       <Modal
         visible={addStaffOpen}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setAddStaffOpen(false)}
       >
         <View style={styles.modalOverlay}>
@@ -531,31 +760,41 @@ export default function AdminProfile() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Team Member</Text>
               <TouchableOpacity onPress={() => setAddStaffOpen(false)}>
-                <Text style={{ fontSize: 18 }}>✕</Text>
+                <MaterialIcons name="close" size={24} color="#374151" />
               </TouchableOpacity>
             </View>
+
+            <Text style={styles.modalLabel}>Name</Text>
             <TextInput
-              style={styles.input}
+              style={styles.modalInput}
               value={newStaff.name}
               onChangeText={(v) => setNewStaff((s) => ({ ...s, name: v }))}
               placeholder="Full Name"
+              placeholderTextColor="#9CA3AF"
             />
+
+            <Text style={styles.modalLabel}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={styles.modalInput}
               value={newStaff.email}
               onChangeText={(v) => setNewStaff((s) => ({ ...s, email: v }))}
               placeholder="Work Email"
               keyboardType="email-address"
               autoCapitalize="none"
+              placeholderTextColor="#9CA3AF"
             />
+
+            <Text style={styles.modalLabel}>Password</Text>
             <TextInput
-              style={styles.input}
+              style={styles.modalInput}
               value={newStaff.password}
               onChangeText={(v) => setNewStaff((s) => ({ ...s, password: v }))}
               placeholder="Access Password"
               secureTextEntry
+              placeholderTextColor="#9CA3AF"
             />
-            <Text style={styles.inputLabel}>Role</Text>
+
+            <Text style={styles.modalLabel}>Role</Text>
             <View style={styles.roleRow}>
               {[
                 { id: "owner", label: "Owner" },
@@ -570,9 +809,7 @@ export default function AdminProfile() {
                     styles.rolePill,
                     newStaff.role === role.id && styles.rolePillActive,
                   ]}
-                  onPress={() =>
-                    setNewStaff((s) => ({ ...s, role: role.id }))
-                  }
+                  onPress={() => setNewStaff((s) => ({ ...s, role: role.id }))}
                 >
                   <Text
                     style={
@@ -586,12 +823,13 @@ export default function AdminProfile() {
                 </TouchableOpacity>
               ))}
             </View>
+
             <TouchableOpacity
-              style={styles.saveBtn}
+              style={styles.modalBtnPrimary}
               onPress={handleAddStaff}
               disabled={addingStaff}
             >
-              <Text style={styles.saveBtnText}>
+              <Text style={styles.modalBtnTextPrimary}>
                 {addingStaff ? "Saving..." : "Save Member"}
               </Text>
             </TouchableOpacity>
@@ -599,42 +837,53 @@ export default function AdminProfile() {
         </View>
       </Modal>
 
+      {/* ════════════  EDIT STAFF MODAL  ════════════ */}
       <Modal
         visible={editStaffOpen}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setEditStaffOpen(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Team Member</Text>
+              <Text style={styles.modalTitle}>Edit Member</Text>
               <TouchableOpacity onPress={() => setEditStaffOpen(false)}>
-                <Text style={{ fontSize: 18 }}>✕</Text>
+                <MaterialIcons name="close" size={24} color="#374151" />
               </TouchableOpacity>
             </View>
+
+            <Text style={styles.modalLabel}>Name</Text>
             <TextInput
-              style={styles.input}
+              style={styles.modalInput}
               value={editStaff.name}
               onChangeText={(v) => setEditStaff((s) => ({ ...s, name: v }))}
               placeholder="Full Name"
+              placeholderTextColor="#9CA3AF"
             />
+
+            <Text style={styles.modalLabel}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={styles.modalInput}
               value={editStaff.email}
               onChangeText={(v) => setEditStaff((s) => ({ ...s, email: v }))}
               placeholder="Work Email"
               keyboardType="email-address"
               autoCapitalize="none"
+              placeholderTextColor="#9CA3AF"
             />
+
+            <Text style={styles.modalLabel}>New Password (Optional)</Text>
             <TextInput
-              style={styles.input}
+              style={styles.modalInput}
               value={editStaff.password}
               onChangeText={(v) => setEditStaff((s) => ({ ...s, password: v }))}
-              placeholder="New Password (optional)"
+              placeholder="New Password"
               secureTextEntry
+              placeholderTextColor="#9CA3AF"
             />
-            <Text style={styles.inputLabel}>Role</Text>
+
+            <Text style={styles.modalLabel}>Role</Text>
             <View style={styles.roleRow}>
               {[
                 { id: "owner", label: "Owner" },
@@ -649,9 +898,7 @@ export default function AdminProfile() {
                     styles.rolePill,
                     editStaff.role === role.id && styles.rolePillActive,
                   ]}
-                  onPress={() =>
-                    setEditStaff((s) => ({ ...s, role: role.id }))
-                  }
+                  onPress={() => setEditStaff((s) => ({ ...s, role: role.id }))}
                 >
                   <Text
                     style={
@@ -665,244 +912,401 @@ export default function AdminProfile() {
                 </TouchableOpacity>
               ))}
             </View>
+
             <TouchableOpacity
-              style={styles.saveBtn}
+              style={styles.modalBtnPrimary}
               onPress={handleUpdateStaff}
               disabled={editingStaff}
             >
-              <Text style={styles.saveBtnText}>
+              <Text style={styles.modalBtnTextPrimary}>
                 {editingStaff ? "Updating..." : "Update Member"}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Floor Plan</Text>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={handleAddTable}>
-            <Text style={styles.secondaryBtnText}>+ Add Table</Text>
-          </TouchableOpacity>
-        </View>
-        {tablesLoading ? (
-          <Text style={styles.mutedText}>Loading tables...</Text>
-        ) : tablesError ? (
-          <Text style={styles.errorText}>{tablesError}</Text>
-        ) : (
-          tables.map((t) => (
-            <View key={resolveTableId(t) || resolveTableLabel(t)} style={styles.tableRow}>
-              <Text style={styles.tableLabel}>{resolveTableLabel(t)}</Text>
-              <View style={styles.tableActions}>
-                <Switch
-                  value={!!resolveEnabled(t)}
-                  onValueChange={() => handleToggleTable(t)}
-                />
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDeleteTable(t)}
-                >
-                  <Text style={styles.deleteBtnText}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Devices & Printing</Text>
-        <View style={styles.deviceCard}>
-          <Text style={styles.deviceName}>Kitchen Printer</Text>
-          <Text style={styles.deviceStatus}>Connected</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.deviceCard}
-          onPress={() => router.push("/admin/qr-codes")}
-        >
-          <Text style={styles.deviceName}>QR Codes</Text>
-          <Text style={styles.deviceStatus}>Manage table QR generation</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
+/* ═══════════════════════════════════════════════════
+   STYLES
+   ═══════════════════════════════════════════════════ */
+
 const styles = StyleSheet.create({
-  scroll: { backgroundColor: "#f6f8fa" },
-  container: { padding: 16, alignItems: "stretch" },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 16,
-    alignSelf: "center",
+  container: {
+    flex: 1,
+    backgroundColor: "#F9FAFB",
   },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+  scroll: {
+    flex: 1,
   },
-  avatarRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#eee" },
-  avatarFallback: {
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    width: "100%",
+  },
+  profileAvatar: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#eee",
+    backgroundColor: "#FFF",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginRight: 12,
   },
-  avatarText: { fontWeight: "700", fontSize: 28, color: "#666" },
-  input: {
-    backgroundColor: "#f6f8fa",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    fontSize: 16,
+  profileImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: "#FEF3C7",
+  },
+  headerCenter: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#111827",
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "#4B5563",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  contentContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+    paddingTop: 24,
+  },
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "#F3F4F6",
   },
-  row: { flexDirection: "row", marginBottom: 10 },
-  saveBtn: {
-    backgroundColor: "#0a84ff",
+  cardTitle: {
+    fontSize: 18,
+    color: "#111827",
+  },
+  sectionIconBg: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginRight: 10,
   },
-  saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  section: { marginBottom: 20 },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 16,
   },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
   secondaryBtn: {
-    backgroundColor: "#111827",
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 20,
   },
-  secondaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
+  secondaryBtnText: {
+    color: "#D97706",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  input: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#111827",
+  },
+  row: {
+    flexDirection: "row",
+    marginTop: 8,
+  },
+  saveBtn: {
+    marginTop: 20,
+    backgroundColor: "#F59E0B",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    shadowColor: "#F59E0B",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveBtnText: {
+    color: "#FFF",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+
+  /* TEAM MEMBERS */
   memberCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFF",
     borderRadius: 12,
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
     elevation: 1,
+  },
+  avatarSmall: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F3F4F6",
+  },
+  memberName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  memberRole: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "600",
+    marginTop: 2,
   },
   memberActions: {
-    alignItems: "flex-end",
-    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
   },
-  editBtn: {
-    marginTop: 6,
-    marginBottom: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#eef2ff",
-    alignItems: "center",
-  },
-  editBtnText: { fontSize: 12 },
-  memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#eee",
+  actionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
   },
-  name: { fontSize: 16, fontWeight: "700" },
-  email: { fontSize: 14, color: "#888" },
-  role: {
-    backgroundColor: "#e0e7ff",
-    color: "#3730a3",
+  emptyState: {
+    padding: 20,
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+  },
+  emptyStateText: {
+    color: "#9CA3AF",
+    fontWeight: "500",
+  },
+  mutedText: {
+    color: "#9CA3AF",
+    fontStyle: "italic",
+    fontSize: 13,
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 13,
+  },
+
+  /* TABLES */
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  tableLabel: {
+    fontSize: 15,
     fontWeight: "700",
-    fontSize: 12,
+    color: "#111827",
+  },
+  tableActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  deleteTableBtn: {
+    paddingVertical: 6,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: "#FEF2F2",
     borderRadius: 8,
-    marginLeft: 8,
+  },
+  deleteTableText: {
+    color: "#DC2626",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  /* DEVICES */
+  deviceRow: {
+    flexDirection: "row",
   },
   deviceCard: {
-    backgroundColor: "#fff",
+    flex: 1,
+    backgroundColor: "#FFF",
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    padding: 16,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
     elevation: 1,
   },
-  deviceName: { fontWeight: "700", fontSize: 15 },
-  deviceStatus: { color: "#22c55e", fontWeight: "600", fontSize: 13 },
-  tableRow: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
+  deviceIcon: {
+    fontSize: 28,
     marginBottom: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  },
+  deviceName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  deviceStatus: {
+    fontSize: 12,
+    color: "#059669",
+    fontWeight: "600",
+    marginTop: 4,
+  },
+
+  /* LOGOUT */
+  logoutBtn: {
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: "center",
-    elevation: 1,
+    marginTop: 10,
   },
-  tableLabel: { fontWeight: "700", fontSize: 15 },
-  tableActions: { flexDirection: "row", alignItems: "center" },
-  deleteBtn: {
-    marginLeft: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#fee2e2",
+  logoutBtnText: {
+    color: "#EF4444",
+    fontWeight: "700",
+    fontSize: 15,
   },
-  deleteBtnText: { color: "#991b1b", fontWeight: "700", fontSize: 12 },
-  mutedText: { color: "#6b7280" },
-  errorText: { color: "#b91c1c" },
+
+  /* MODALS */
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 16,
   },
   modalContent: {
-    width: "100%",
-    maxWidth: 520,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
+    width: "90%",
+    backgroundColor: "#FFF",
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+    maxHeight: "80%",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 20,
   },
-  modalTitle: { fontSize: 18, fontWeight: "700" },
-  inputLabel: { fontSize: 12, fontWeight: "700", marginBottom: 8 },
-  roleRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
-  rolePill: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#374151",
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  modalInput: {
+    backgroundColor: "#F9FAFB",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: "#fff",
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#111827",
   },
-  rolePillActive: { backgroundColor: "#111827", borderColor: "#111827" },
-  rolePillText: { fontSize: 12, fontWeight: "700", color: "#6b7280" },
-  rolePillTextActive: { fontSize: 12, fontWeight: "700", color: "#fff" },
+  roleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 6,
+    marginBottom: 20,
+  },
+  rolePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  rolePillActive: {
+    backgroundColor: "#111827",
+    borderColor: "#111827",
+  },
+  rolePillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#4B5563",
+  },
+  rolePillTextActive: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFF",
+  },
+  modalBtnPrimary: {
+    backgroundColor: "#F59E0B",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  modalBtnTextPrimary: {
+    color: "#FFF",
+    fontWeight: "700",
+    fontSize: 15,
+  },
 });

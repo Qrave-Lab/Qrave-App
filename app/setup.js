@@ -12,7 +12,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
+import { supabase } from "../lib/supabaseClient";
+import { syncBackendSessionForGoogleUser } from "../lib/googleBackendBridge";
 
 const { width, height } = Dimensions.get("window");
 const THEME_COLOR = "#F4B400";
@@ -310,10 +313,57 @@ export default function SetupScreen() {
 
   const handleComplete = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const rawUser = await AsyncStorage.getItem("user");
+      let parsedUser = null;
+      if (rawUser) {
+        parsedUser = JSON.parse(rawUser);
+        const nextRole = parsedUser?.role || "owner";
+        const nextUser = {
+          ...parsedUser,
+          role: nextRole,
+          user_metadata: {
+            ...(parsedUser?.user_metadata || {}),
+            role: nextRole,
+            restaurant_name: brandName?.trim() || parsedUser?.user_metadata?.restaurant_name,
+            tables,
+            open_time: openTime,
+            close_time: closeTime,
+          },
+        };
+        await AsyncStorage.setItem("user", JSON.stringify(nextUser));
+        parsedUser = nextUser;
+      }
+
+      if (parsedUser?.email && parsedUser?.id) {
+        const backendSession = await syncBackendSessionForGoogleUser(parsedUser, {
+          ensureSignup: true,
+          restaurantName: brandName?.trim(),
+        });
+        if (!backendSession.ok) {
+          throw new Error(backendSession.message || "Failed to link backend account");
+        }
+      }
+
+      if (supabase) {
+        await supabase.auth.updateUser({
+          data: {
+            role: "owner",
+            restaurant_name: brandName?.trim() || undefined,
+            tables,
+            open_time: openTime,
+            close_time: closeTime,
+          },
+        });
+      }
+
       router.push("/complete");
-    }, 600);
+    } catch (e) {
+      console.warn("Failed to complete setup profile sync", e);
+      router.push("/complete");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

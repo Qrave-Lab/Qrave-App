@@ -115,7 +115,7 @@ export default function KitchenScreen() {
         return false;
       }
       if (!isKitchen) {
-        router.replace("/dashboard");
+        router.replace("/setup");
         return false;
       }
       return true;

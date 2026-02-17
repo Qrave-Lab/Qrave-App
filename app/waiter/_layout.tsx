@@ -125,7 +125,8 @@ export default function WaiterTabLayout() {
               return;
             }
             if (!isWaiter) {
-              router.replace("/dashboard");
+              const isKitchen = role === "kitchen" || role === "chef";
+              router.replace(isKitchen ? "/kitchen" : "/setup");
               return;
             }
           } catch (e) {

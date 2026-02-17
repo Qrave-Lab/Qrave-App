@@ -119,6 +119,7 @@ const MODAL_TABS: { id: ModalTab; label: string }[] = [
 export default function Inventory() {
   const { width } = useWindowDimensions();
   const router = useRouter();
+  const isCompact = width < 380;
   const CARD_MARGIN = 12;
   const CONTAINER_PADDING = 16;
   const cardWidth = (width - CONTAINER_PADDING * 2 - CARD_MARGIN) / 2;
@@ -139,8 +140,6 @@ export default function Inventory() {
   const [saving, setSaving] = useState(false);
   const [uploadingModel, setUploadingModel] = useState(false);
   const [logoUrl, setLogoUrl] = useState("");
-  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
-  const [showSubCatPopup, setShowSubCatPopup] = useState(false);
 
   // Modal
   const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
@@ -699,21 +698,6 @@ export default function Inventory() {
                 color={showArchived ? "#92400E" : "#333"}
               />
             </TouchableOpacity>
-            {canManageCategories && (
-              <TouchableOpacity
-                style={[
-                  styles.headerBtn,
-                  showSubCatPopup && styles.headerBtnActive,
-                ]}
-                onPress={() => setShowSubCatPopup((s) => !s)}
-              >
-                <MaterialIcons
-                  name="category"
-                  size={22}
-                  color={showSubCatPopup ? "#7C3AED" : "#333"}
-                />
-              </TouchableOpacity>
-            )}
             <TouchableOpacity style={styles.headerBtn} onPress={openAddModal}>
               <MaterialIcons name="add" size={24} color="#333" />
             </TouchableOpacity>
@@ -760,6 +744,63 @@ export default function Inventory() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── SUBCATEGORY CREATION ── */}
+      {canManageCategories && (
+        <View style={styles.subCatCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionIconBg}>
+              <MaterialIcons name="category" size={18} color="#8B5CF6" />
+            </View>
+            <Text style={styles.subCatLabel}>Add Subcategory</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ maxHeight: 36, marginBottom: 8 }}
+          >
+            {parentCategories.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.subCatParentBtn,
+                  (newSubParentId || parentCategories[0]?.id) === cat.id &&
+                    styles.subCatParentBtnActive,
+                ]}
+                onPress={() => setNewSubParentId(cat.id)}
+              >
+                <Text
+                  style={[
+                    styles.subCatParentText,
+                    (newSubParentId || parentCategories[0]?.id) === cat.id &&
+                      styles.subCatParentTextActive,
+                  ]}
+                >
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <View style={styles.subCatInputRow}>
+            <TextInput
+              style={styles.subCatInput}
+              placeholder="e.g. Pizzas, Burgers"
+              placeholderTextColor="#9CA3AF"
+              value={newSubName}
+              onChangeText={setNewSubName}
+            />
+            <TouchableOpacity
+              style={styles.subCatAddBtn}
+              onPress={createSubcategory}
+              disabled={creatingSub}
+            >
+              <Text style={styles.subCatAddBtnText}>
+                {creatingSub ? "..." : "Add"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* ── CATEGORY TABS ── */}
       <ScrollView
@@ -945,76 +986,59 @@ export default function Inventory() {
         contentContainerStyle={styles.listContent}
       />
 
-      {/* ── FAB CATEGORY MENU ── */}
-      {showCategoryMenu && (
-        <View style={styles.fabMenuContainer}>
-          <ScrollView contentContainerStyle={styles.fabMenuScroll}>
-            {categoryTabs.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                style={[
-                  styles.fabMenuItem,
-                  activeCategory === cat && styles.fabMenuItemActive,
-                ]}
-                onPress={() => {
-                  setActiveCategory(cat);
-                  setShowCategoryMenu(false);
-                  if (cat === "all") scrollTabsToStart();
-                }}
-              >
-                <Text
-                  style={[
-                    styles.fabMenuText,
-                    activeCategory === cat && styles.fabMenuTextActive,
-                  ]}
-                >
-                  {cat === "all" ? "All Categories" : cat}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setShowCategoryMenu(!showCategoryMenu)}
-        activeOpacity={0.8}
-      >
-        <MaterialIcons name="menu-book" size={26} color="#FFF" />
-      </TouchableOpacity>
-
       {/* ── EDIT / ADD MODAL ── */}
       <Modal visible={!!modalMode} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Centered Title */}
-            <Text style={styles.modalTitle}>
-              {modalMode === "add" ? "Create Product" : "Edit Product"}
-            </Text>
-
-            {/* Tabs — wrapped centered pills */}
-            <View style={styles.modalTabs}>
-              {MODAL_TABS.map((tab) => (
-                <TouchableOpacity
-                  key={tab.id}
-                  style={[
-                    styles.modalTab,
-                    activeModalTab === tab.id && styles.modalTabActive,
-                  ]}
-                  onPress={() => setActiveModalTab(tab.id)}
-                >
-                  <Text
-                    style={
-                      activeModalTab === tab.id
-                        ? styles.modalTabTextActive
-                        : styles.modalTabText
-                    }
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>
+                  {modalMode === "add" ? "Create Product" : "Edit Product"}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  Configure details, pricing, and assets.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setModalMode(null);
+                  setEditingItem(null);
+                }}
+              >
+                <Text style={styles.modalCloseBtn}>{"\u2715"}</Text>
+              </TouchableOpacity>
             </View>
+
+            {/* Modal Tabs */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.modalTabScroll}
+            >
+              <View style={styles.modalTabs}>
+                {MODAL_TABS.map((tab) => (
+                  <TouchableOpacity
+                    key={tab.id}
+                    style={[
+                      styles.modalTab,
+                      activeModalTab === tab.id && styles.modalTabActive,
+                    ]}
+                    onPress={() => setActiveModalTab(tab.id)}
+                  >
+                    <Text
+                      style={
+                        activeModalTab === tab.id
+                          ? styles.modalTabTextActive
+                          : styles.modalTabText
+                      }
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             {/* Modal Body */}
             <ScrollView
@@ -1624,103 +1648,26 @@ export default function Inventory() {
               )}
             </ScrollView>
 
-            {/* Modal Actions */}
-            <View style={styles.modalActions}>
+            {/* Modal Footer */}
+            <View style={styles.modalFooter}>
               <TouchableOpacity
-                style={styles.modalBtn}
+                style={styles.discardBtn}
                 onPress={() => {
                   setModalMode(null);
                   setEditingItem(null);
                 }}
               >
-                <Text style={styles.modalBtnText}>Discard</Text>
+                <Text style={styles.discardBtnText}>Discard</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                style={styles.saveBtn}
                 onPress={handleSave}
                 disabled={saving}
               >
                 {saving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text
-                    style={[styles.modalBtnText, styles.modalBtnTextPrimary]}
-                  >
-                    Save Changes
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── SUBCATEGORY MODAL ── */}
-      <Modal visible={showSubCatPopup} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Subcategory</Text>
-
-            <Text style={styles.modalLabel}>Parent Category</Text>
-            <View style={styles.modalDropdown}>
-              {parentCategories.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.modalDropdownItem,
-                    (newSubParentId || parentCategories[0]?.id) === cat.id &&
-                      styles.modalDropdownItemActive,
-                  ]}
-                  onPress={() => setNewSubParentId(cat.id)}
-                >
-                  <Text
-                    style={[
-                      styles.modalDropdownText,
-                      (newSubParentId || parentCategories[0]?.id) === cat.id &&
-                        styles.modalDropdownTextActive,
-                    ]}
-                  >
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.modalLabel}>Subcategory Name</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Pizzas, Burgers"
-              placeholderTextColor="#9CA3AF"
-              value={newSubName}
-              onChangeText={setNewSubName}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalBtn}
-                onPress={() => {
-                  setShowSubCatPopup(false);
-                  setNewSubName("");
-                }}
-              >
-                <Text style={styles.modalBtnText}>Discard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={async () => {
-                  await createSubcategory();
-                  setShowSubCatPopup(false);
-                }}
-                disabled={creatingSub}
-              >
-                {creatingSub ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text
-                    style={[styles.modalBtnText, styles.modalBtnTextPrimary]}
-                  >
-                    Save
-                  </Text>
+                  <Text style={styles.saveBtnText}>Save Changes</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1855,6 +1802,69 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  /* ── SUBCATEGORY ── */
+  subCatCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  sectionIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  subCatLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  subCatParentBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+    marginRight: 6,
+  },
+  subCatParentBtnActive: { backgroundColor: AdminColors.primary },
+  subCatParentText: { fontSize: 12, fontWeight: "700", color: "#6b7280" },
+  subCatParentTextActive: { color: "#fff" },
+  subCatInputRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  subCatInput: {
+    flex: 1,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    color: "#1F2937",
+  },
+  subCatAddBtn: {
+    backgroundColor: "#111827",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  subCatAddBtnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
+
   /* ── CATEGORY TABS ── */
   tabsScroll: { maxHeight: 50 },
   tabsContainer: {
@@ -1946,7 +1956,7 @@ const styles = StyleSheet.create({
 
   /* ── LOADING / ERROR ── */
   loadingBox: { alignItems: "center", paddingVertical: 40 },
-  loadingText: { marginTop: 10, color: "#6b7280", fontWeight: "600" } as any,
+  loadingText: { marginTop: 10, color: "#6b7280", fontWeight: "600" },
   errorText: {
     color: "#dc2626",
     marginHorizontal: 16,
@@ -1957,7 +1967,7 @@ const styles = StyleSheet.create({
   /* ── CARD GRID ── */
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 32,
     paddingTop: 8,
   },
   card: {
@@ -2084,175 +2094,53 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  /* ── FAB ── */
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    backgroundColor: "#F59E0B",
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
-    zIndex: 15,
-  },
-  fabMenuContainer: {
-    position: "absolute",
-    bottom: 90,
-    right: 24,
-    width: 210,
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    paddingVertical: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-    zIndex: 20,
-    maxHeight: 400,
-  },
-  fabMenuScroll: { paddingHorizontal: 8 },
-  fabMenuItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginVertical: 1,
-  },
-  fabMenuItemActive: { backgroundColor: "#FEF3C7" },
-  fabMenuText: { fontSize: 14, color: "#374151", fontWeight: "600" },
-  fabMenuTextActive: { color: "#92400E", fontWeight: "800" },
-
   /* ── MODAL ── */
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
-    alignItems: "center",
+    paddingHorizontal: 16,
   },
   modalContent: {
-    width: "90%",
-    backgroundColor: "#FFF",
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-    maxHeight: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    maxHeight: "90%",
+    overflow: "hidden",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "800",
-    marginBottom: 20,
     color: "#111827",
-    textAlign: "center",
   },
-  modalTabs: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 20,
-    justifyContent: "center",
+  modalSubtitle: { fontSize: 11, color: "#9ca3af", marginTop: 2 },
+  modalCloseBtn: { fontSize: 20, color: "#9ca3af", padding: 6 },
+  modalTabScroll: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
+  modalTabs: { flexDirection: "row", paddingHorizontal: 16, gap: 4 },
   modalTab: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
   },
-  modalTabActive: {
-    backgroundColor: "#111827",
-  },
-  modalTabText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4B5563",
-  },
+  modalTabActive: { borderBottomColor: AdminColors.primary },
+  modalTabText: { color: "#9ca3af", fontWeight: "700", fontSize: 12 },
   modalTabTextActive: {
+    color: AdminColors.primary,
+    fontWeight: "800",
     fontSize: 12,
-    fontWeight: "700",
-    color: "#FFF",
   },
-  modalLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  modalInput: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#111827",
-    marginBottom: 14,
-  },
-  modalDropdown: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  modalDropdownItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  modalDropdownItemActive: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#F59E0B",
-  },
-  modalDropdownText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4B5563",
-  },
-  modalDropdownTextActive: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#92400E",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 20,
-  },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-  },
-  modalBtnPrimary: {
-    backgroundColor: "#F59E0B",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  modalBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4B5563",
-  },
-  modalBtnTextPrimary: {
-    color: "#FFF",
-  },
-  modalBody: { paddingVertical: 8 },
+  modalBody: { paddingHorizontal: 20, paddingVertical: 16 },
 
   /* ── FIELDS ── */
   fieldLabel: {
@@ -2303,11 +2191,11 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   chipActive: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#F59E0B",
+    backgroundColor: AdminColors.primary,
+    borderColor: AdminColors.primary,
   },
-  chipText: { color: "#4B5563", fontWeight: "700", fontSize: 12 },
-  chipTextActive: { color: "#92400E", fontWeight: "700", fontSize: 12 },
+  chipText: { color: "#6b7280", fontWeight: "700", fontSize: 12 },
+  chipTextActive: { color: "#fff", fontWeight: "700", fontSize: 12 },
   allergenGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2323,11 +2211,11 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   allergenBtnActive: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#EF4444",
+    backgroundColor: AdminColors.primary,
+    borderColor: AdminColors.primary,
   },
-  allergenText: { color: "#4B5563", fontWeight: "600", fontSize: 11 },
-  allergenTextActive: { color: "#B91C1C", fontWeight: "700", fontSize: 11 },
+  allergenText: { color: "#6b7280", fontWeight: "700", fontSize: 11 },
+  allergenTextActive: { color: "#fff", fontWeight: "700", fontSize: 11 },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2462,4 +2350,29 @@ const styles = StyleSheet.create({
   },
   restoreActionBtn: { backgroundColor: "#eef2ff", borderColor: "#c7d2fe" },
   archiveActionText: { fontWeight: "700", fontSize: 12, color: "#4b5563" },
+  modalFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+    gap: 10,
+  },
+  discardBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+  },
+  discardBtnText: { color: "#6b7280", fontWeight: "700" },
+  saveBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#111827",
+    minWidth: 120,
+    alignItems: "center",
+  },
+  saveBtnText: { color: "#fff", fontWeight: "700" },
 });

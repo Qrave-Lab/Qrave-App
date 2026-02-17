@@ -139,7 +139,7 @@ export default function CompleteScreen() {
               onPressIn={handlePressIn}
               onPressOut={handlePressOut}
             >
-              <Text style={styles.launchButtonText}>Launch Dashboard</Text>
+              <Text style={styles.launchButtonText}>Launch Admin</Text>
               <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8 }}>
                 <Path
                   d="M5 12h14M12 5l7 7-7 7"

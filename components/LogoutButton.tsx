@@ -11,6 +11,8 @@ const LogoutButton = () => {
     await AsyncStorage.removeItem("user");
     await AsyncStorage.removeItem("token");
     await AsyncStorage.removeItem("qrave_jwt");
+    await AsyncStorage.removeItem("qrave_refresh");
+    await AsyncStorage.removeItem("qrave_csrf");
     router.replace("/");
   };
 

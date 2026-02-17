@@ -1,7 +1,3 @@
-import { MaterialIcons as MaterialIcons_ } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as DocumentPicker from "expo-document-picker";
-import { useRouter } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -10,28 +6,25 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
   View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  Image,
+  useWindowDimensions,
+  RefreshControl,
+  Modal,
+  Alert,
+  ActivityIndicator,
+  Switch,
 } from "react-native";
-import iconPng from "../../assets/images/icon.png";
-import AdminWavyHeader from "../../components/AdminWavyHeader";
+import * as DocumentPicker from "expo-document-picker";
 import { AdminColors } from "../../constants/theme";
+import iconPng from "../../assets/images/icon.png";
 import { api } from "../../lib/apiClient";
-
-const MaterialIcons = MaterialIcons_ as any;
 
 // ── Types ────────────────────────────────────────────────────────────
 type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -118,10 +111,7 @@ const MODAL_TABS: { id: ModalTab; label: string }[] = [
 // ── Component ────────────────────────────────────────────────────────
 export default function Inventory() {
   const { width } = useWindowDimensions();
-  const router = useRouter();
-  const CARD_MARGIN = 12;
-  const CONTAINER_PADDING = 16;
-  const cardWidth = (width - CONTAINER_PADDING * 2 - CARD_MARGIN) / 2;
+  const isCompact = width < 380;
 
   // Data
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -138,9 +128,6 @@ export default function Inventory() {
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [uploadingModel, setUploadingModel] = useState(false);
-  const [logoUrl, setLogoUrl] = useState("");
-  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
-  const [showSubCatPopup, setShowSubCatPopup] = useState(false);
 
   // Modal
   const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
@@ -211,28 +198,6 @@ export default function Inventory() {
     () => (selectedParentId ? getSubcategories(selectedParentId) : []),
     [selectedParentId, getSubcategories],
   );
-
-  // ── Logo fetch ──────────────────────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem("user");
-        if (raw) {
-          const u = JSON.parse(raw);
-          const rId = u?.restaurantId || u?.restaurant_id || u?.restaurant?.id;
-          if (rId) {
-            try {
-              const res = await fetch(
-                `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
-              );
-              const data = await res.json();
-              if (data?.logo_url) setLogoUrl(data.logo_url);
-            } catch {}
-          }
-        }
-      } catch {}
-    })();
-  }, []);
 
   // ── Data loading ────────────────────────────────────────────────
   const refreshMenu = useCallback(async (silent = false) => {
@@ -530,6 +495,7 @@ export default function Inventory() {
         itemId = res.id;
       }
 
+      // Update main item details
       await api.put(`/api/admin/menu/item?item_id=${itemId}`, {
         category_id: editingItem.categoryId || undefined,
         name: editingItem.name,
@@ -543,6 +509,7 @@ export default function Inventory() {
         is_out_of_stock: editingItem.isOutOfStock,
       });
 
+      // Update ingredients
       await api.put(
         `/api/admin/menu/item/ingredients?item_id=${itemId}`,
         editingItem.ingredientsStructured.map((i) => ({
@@ -552,6 +519,7 @@ export default function Inventory() {
         })),
       );
 
+      // Manage variants: add new, delete removed
       const existing = items.find((i) => i.id === itemId)?.variants ?? [];
       const existingIds = new Set(existing.map((v) => v.id));
       const currentIds = new Set(editingItem.variants.map((v) => v.id));
@@ -602,12 +570,11 @@ export default function Inventory() {
     const asset = result.assets[0];
     const fileName = (asset.name || "").toLowerCase();
     const mimeType = (asset.mimeType || "").toLowerCase();
-    const ext =
-      fileName.endsWith(".usdz") || mimeType.includes("usdz")
-        ? "usdz"
-        : fileName.endsWith(".glb") || mimeType.includes("gltf")
-          ? "glb"
-          : "";
+    const ext = fileName.endsWith(".usdz") || mimeType.includes("usdz")
+      ? "usdz"
+      : fileName.endsWith(".glb") || mimeType.includes("gltf")
+        ? "glb"
+        : "";
     if (!ext) {
       Alert.alert("Invalid File", "Please select a .glb or .usdz file.");
       return;
@@ -655,113 +622,102 @@ export default function Inventory() {
     [imageErrors],
   );
 
-  /* ═══════════════════════════════════════════════════
-     RENDER
-     ═══════════════════════════════════════════════════ */
-
+  // ── Render ────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8CB46" />
-
-      {/* ── WAVY HEADER ── */}
-      <AdminWavyHeader height={160}>
-        <View style={styles.headerTopRow}>
-          <TouchableOpacity
-            style={styles.profileAvatar}
-            onPress={() => router.push("/admin/profile")}
-            activeOpacity={0.8}
-          >
-            {logoUrl ? (
-              <Image source={{ uri: logoUrl }} style={styles.profileImage} />
-            ) : (
-              <Image source={iconPng} style={styles.profileImage} />
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Menu</Text>
-            <Text style={styles.headerSubtitle}>
-              {filteredItems.length} Products
-            </Text>
-          </View>
-
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.headerBtn, showArchived && styles.headerBtnActive]}
-              onPress={() => {
-                setShowArchived((s) => !s);
-                clearSelection();
-              }}
-            >
-              <MaterialIcons
-                name={showArchived ? "unarchive" : "archive"}
-                size={24}
-                color={showArchived ? "#92400E" : "#333"}
-              />
-            </TouchableOpacity>
-            {canManageCategories && (
-              <TouchableOpacity
-                style={[
-                  styles.headerBtn,
-                  showSubCatPopup && styles.headerBtnActive,
-                ]}
-                onPress={() => setShowSubCatPopup((s) => !s)}
-              >
-                <MaterialIcons
-                  name="category"
-                  size={22}
-                  color={showSubCatPopup ? "#7C3AED" : "#333"}
-                />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.headerBtn} onPress={openAddModal}>
-              <MaterialIcons name="add" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </AdminWavyHeader>
-
-      {/* ── SEARCH & SELECT ALL ── */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBarWrapper}>
-          <MaterialIcons
-            name="search"
-            size={20}
-            color="#9CA3AF"
-            style={{ marginRight: 8 }}
-          />
-          <TextInput
-            style={styles.searchBar}
-            placeholder="Search menu..."
-            placeholderTextColor="#9CA3AF"
-            value={search}
-            onChangeText={setSearch}
-          />
-        </View>
-        <TouchableOpacity
-          style={[
-            styles.selectAllBtn,
-            allVisibleSelected && styles.selectAllBtnActive,
-          ]}
-          onPress={toggleSelectAll}
-        >
-          <MaterialIcons
-            name={allVisibleSelected ? "check-box" : "check-box-outline-blank"}
-            size={22}
-            color={allVisibleSelected ? AdminColors.primary : "#9CA3AF"}
-          />
-          <Text
-            style={[
-              styles.selectAllText,
-              allVisibleSelected && { color: AdminColors.primary },
-            ]}
-          >
-            All
+      {/* Header */}
+      <View style={[styles.headerRow, isCompact && styles.headerRowCompact]}>
+        <View style={styles.headerTextBlock}>
+          <Text style={[styles.title, isCompact && styles.titleCompact]}>
+            Menu
           </Text>
-        </TouchableOpacity>
+          <Text style={styles.subtitle}>{filteredItems.length} Products</Text>
+        </View>
+        <View
+          style={[
+            styles.headerActions,
+            isCompact && styles.headerActionsCompact,
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.archiveToggle,
+              showArchived && styles.archiveToggleActive,
+            ]}
+            onPress={() => {
+              setShowArchived((s) => !s);
+              clearSelection();
+            }}
+          >
+            <Text
+              style={[
+                styles.archiveToggleText,
+                showArchived && styles.archiveToggleTextActive,
+              ]}
+            >
+              {showArchived ? "Exit Archive" : "Archive"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.newProductBtn} onPress={openAddModal}>
+            <Text style={styles.newProductBtnText}>+ New Product</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* ── CATEGORY TABS ── */}
+      {/* Subcategory creation (owners/managers only) */}
+      {canManageCategories && (
+        <View style={styles.subCatRow}>
+          <Text style={styles.subCatLabel}>Add Subcategory</Text>
+          <View style={styles.subCatForm}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ maxHeight: 36 }}
+            >
+              {parentCategories.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[
+                    styles.subCatParentBtn,
+                    (newSubParentId || parentCategories[0]?.id) === cat.id &&
+                      styles.subCatParentBtnActive,
+                  ]}
+                  onPress={() => setNewSubParentId(cat.id)}
+                >
+                  <Text
+                    style={[
+                      styles.subCatParentText,
+                      (newSubParentId || parentCategories[0]?.id) === cat.id &&
+                        styles.subCatParentTextActive,
+                    ]}
+                  >
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={styles.subCatInputRow}>
+              <TextInput
+                style={styles.subCatInput}
+                placeholder="e.g. Pizzas, Burgers"
+                value={newSubName}
+                onChangeText={setNewSubName}
+              />
+              <TouchableOpacity
+                style={styles.subCatAddBtn}
+                onPress={createSubcategory}
+                disabled={creatingSub}
+              >
+                <Text style={styles.subCatAddBtnText}>
+                  {creatingSub ? "..." : "Add"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Category tabs */}
       <ScrollView
         ref={tabsRef}
         horizontal
@@ -778,7 +734,9 @@ export default function Inventory() {
             style={[styles.tab, activeCategory === cat && styles.tabActive]}
             onPress={() => {
               setActiveCategory(cat);
-              if (cat === "all") scrollTabsToStart();
+              if (cat === "all") {
+                scrollTabsToStart();
+              }
             }}
           >
             <Text
@@ -793,44 +751,65 @@ export default function Inventory() {
         ))}
       </ScrollView>
 
-      {/* ── BULK BANNER ── */}
+      {/* Search + Select All */}
+      <View style={styles.searchRow}>
+        <TouchableOpacity style={styles.selectAll} onPress={toggleSelectAll}>
+          <View
+            style={[
+              styles.checkboxBox,
+              allVisibleSelected && styles.checkboxChecked,
+            ]}
+          />
+          <Text style={styles.selectAllText}>Select All</Text>
+        </TouchableOpacity>
+        <TextInput
+          style={styles.searchBar}
+          placeholder="Search menu..."
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+
+      {/* Bulk action banner */}
       {selectedCount > 0 && (
         <View
-          style={[styles.archiveBanner, showArchived && styles.restoreBanner]}
+          style={[styles.bulkBanner, showArchived && styles.bulkBannerRestore]}
         >
-          <Text style={styles.archiveBannerText}>{selectedCount} selected</Text>
-          <View style={styles.archiveBannerActions}>
-            <TouchableOpacity
-              style={[styles.bulkBtnRed]}
-              onPress={() => handleBulkStock(true)}
-            >
-              <Text style={styles.bulkBtnText}>Out of Stock</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.bulkBtnGreen]}
-              onPress={() => handleBulkStock(false)}
-            >
-              <Text style={styles.bulkBtnText}>In Stock</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.archiveItemsBtn}
-              onPress={() => handleBulkArchive(!showArchived)}
-            >
-              <Text style={styles.archiveItemsBtnText}>
-                {showArchived ? "Restore" : "Archive"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.bannerClose}
-              onPress={clearSelection}
-            >
-              <MaterialIcons name="close" size={16} color="#FFF" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.bulkBannerText}>{selectedCount} selected</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.bulkActions}>
+              <TouchableOpacity
+                style={styles.bulkBtnRed}
+                onPress={() => handleBulkStock(true)}
+              >
+                <Text style={styles.bulkBtnText}>Out of Stock</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bulkBtnGreen}
+                onPress={() => handleBulkStock(false)}
+              >
+                <Text style={styles.bulkBtnText}>In Stock</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bulkBtnDefault}
+                onPress={() => handleBulkArchive(!showArchived)}
+              >
+                <Text style={styles.bulkBtnText}>
+                  {showArchived ? "Restore" : "Archive"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bulkClose}
+                onPress={clearSelection}
+              >
+                <Text style={styles.bulkCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
       )}
 
-      {/* ── LOADING / ERROR ── */}
+      {/* Loading / Error */}
       {loading && (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={AdminColors.primary} />
@@ -839,15 +818,10 @@ export default function Inventory() {
       )}
       {loadError && <Text style={styles.errorText}>{loadError}</Text>}
 
-      {/* ── ITEMS GRID ── */}
+      {/* Items list */}
       <FlatList
         data={filteredItems}
         keyExtractor={(i) => i.id}
-        numColumns={2}
-        columnWrapperStyle={{
-          justifyContent: "space-between",
-          gap: CARD_MARGIN,
-        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -857,13 +831,20 @@ export default function Inventory() {
         }
         renderItem={({ item }) => (
           <View
-            style={[
-              styles.card,
-              { width: cardWidth },
-              item.isOutOfStock && styles.cardOutOfStock,
-            ]}
+            style={[styles.card, item.isOutOfStock && styles.cardOutOfStock]}
           >
-            <View style={styles.imageWrapper}>
+            <TouchableOpacity
+              style={styles.checkbox}
+              onPress={() => toggleSelect(item.id)}
+            >
+              <View
+                style={[
+                  styles.checkboxBox,
+                  item.selected && styles.checkboxChecked,
+                ]}
+              />
+            </TouchableOpacity>
+            <View style={styles.imageBox}>
               <Image
                 source={imageSourceFor(item)}
                 style={styles.image}
@@ -876,56 +857,68 @@ export default function Inventory() {
                   <Text style={styles.modelBadgeText}>3D</Text>
                 </View>
               ) : null}
-              <TouchableOpacity
-                style={styles.editBtnOverlay}
-                onPress={() => openEditModal(item)}
-              >
-                <MaterialIcons name="edit" size={18} color="#111827" />
-              </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={styles.checkboxArea}
-              onPress={() => toggleSelect(item.id)}
-            >
-              <MaterialIcons
-                name={item.selected ? "check-box" : "check-box-outline-blank"}
-                size={24}
-                color={item.selected ? AdminColors.primary : "#D1D5DB"}
-              />
-            </TouchableOpacity>
-
-            <View style={styles.cardContent}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.name} numberOfLines={1}>
                 {item.name}
               </Text>
-              <Text style={styles.sub} numberOfLines={1}>
-                {item.description && item.description !== "No description"
-                  ? item.description
-                  : resolveParentName(item)}
+              <Text style={styles.desc} numberOfLines={1}>
+                {item.description || "No description"}
               </Text>
-              <View style={styles.cardBottom}>
-                <Text style={styles.price}>
-                  {"\u20B9"}
-                  {item.price}
+              <Text style={styles.price}>₹{item.price}</Text>
+              <View style={styles.cardMeta}>
+                <Text style={styles.categoryText}>
+                  {resolveParentName(item)}
                 </Text>
-                {item.isOutOfStock && (
-                  <TouchableOpacity
-                    style={styles.oosBadge}
-                    onPress={() => toggleOutOfStock(item)}
-                  >
-                    <Text style={styles.oosBadgeText}>OOS</Text>
-                  </TouchableOpacity>
-                )}
-                {!item.isOutOfStock && (
-                  <TouchableOpacity
-                    style={styles.inStockBadge}
-                    onPress={() => toggleOutOfStock(item)}
-                  >
-                    <Text style={styles.inStockText}>In Stock</Text>
-                  </TouchableOpacity>
-                )}
+                {item.categoryName && item.parentCategoryName ? (
+                  <Text style={styles.subCategoryText}>
+                    {" "}
+                    • {item.categoryName}
+                  </Text>
+                ) : null}
               </View>
+              {item.allergens?.length > 0 && (
+                <View style={styles.allergenChips}>
+                  {item.allergens.slice(0, 3).map((a) => (
+                    <View key={a.type} style={styles.allergenChip}>
+                      <Text style={styles.allergenChipText}>{a.type[0]}</Text>
+                    </View>
+                  ))}
+                  {item.allergens.length > 3 && (
+                    <Text style={styles.allergenMore}>
+                      +{item.allergens.length - 3}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+            <View style={styles.cardActions}>
+              <TouchableOpacity
+                style={[
+                  styles.stockBadge,
+                  item.isOutOfStock
+                    ? styles.stockBadgeOOS
+                    : styles.stockBadgeIn,
+                ]}
+                onPress={() => toggleOutOfStock(item)}
+              >
+                <Text
+                  style={[
+                    styles.stockBadgeText,
+                    item.isOutOfStock
+                      ? styles.stockTextOOS
+                      : styles.stockTextIn,
+                  ]}
+                >
+                  {item.isOutOfStock ? "OOS" : "In Stock"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => openEditModal(item)}
+              >
+                <Text style={styles.editIcon}>✏️</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -937,7 +930,7 @@ export default function Inventory() {
                   ? "No archived items."
                   : search
                     ? "No matching items."
-                    : "No menu items. Tap + to add."}
+                    : "No menu items. Tap + New Product to add."}
               </Text>
             </View>
           ) : null
@@ -945,76 +938,59 @@ export default function Inventory() {
         contentContainerStyle={styles.listContent}
       />
 
-      {/* ── FAB CATEGORY MENU ── */}
-      {showCategoryMenu && (
-        <View style={styles.fabMenuContainer}>
-          <ScrollView contentContainerStyle={styles.fabMenuScroll}>
-            {categoryTabs.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                style={[
-                  styles.fabMenuItem,
-                  activeCategory === cat && styles.fabMenuItemActive,
-                ]}
-                onPress={() => {
-                  setActiveCategory(cat);
-                  setShowCategoryMenu(false);
-                  if (cat === "all") scrollTabsToStart();
-                }}
-              >
-                <Text
-                  style={[
-                    styles.fabMenuText,
-                    activeCategory === cat && styles.fabMenuTextActive,
-                  ]}
-                >
-                  {cat === "all" ? "All Categories" : cat}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setShowCategoryMenu(!showCategoryMenu)}
-        activeOpacity={0.8}
-      >
-        <MaterialIcons name="menu-book" size={26} color="#FFF" />
-      </TouchableOpacity>
-
-      {/* ── EDIT / ADD MODAL ── */}
+      {/* ── Edit / Add Modal ─────────────────────────────────────── */}
       <Modal visible={!!modalMode} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Centered Title */}
-            <Text style={styles.modalTitle}>
-              {modalMode === "add" ? "Create Product" : "Edit Product"}
-            </Text>
-
-            {/* Tabs — wrapped centered pills */}
-            <View style={styles.modalTabs}>
-              {MODAL_TABS.map((tab) => (
-                <TouchableOpacity
-                  key={tab.id}
-                  style={[
-                    styles.modalTab,
-                    activeModalTab === tab.id && styles.modalTabActive,
-                  ]}
-                  onPress={() => setActiveModalTab(tab.id)}
-                >
-                  <Text
-                    style={
-                      activeModalTab === tab.id
-                        ? styles.modalTabTextActive
-                        : styles.modalTabText
-                    }
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>
+                  {modalMode === "add" ? "Create Product" : "Edit Product"}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  Configure details, pricing, and assets.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setModalMode(null);
+                  setEditingItem(null);
+                }}
+              >
+                <Text style={styles.modalCloseBtn}>✕</Text>
+              </TouchableOpacity>
             </View>
+
+            {/* Modal Tabs */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.modalTabScroll}
+            >
+              <View style={styles.modalTabs}>
+                {MODAL_TABS.map((tab) => (
+                  <TouchableOpacity
+                    key={tab.id}
+                    style={[
+                      styles.modalTab,
+                      activeModalTab === tab.id && styles.modalTabActive,
+                    ]}
+                    onPress={() => setActiveModalTab(tab.id)}
+                  >
+                    <Text
+                      style={
+                        activeModalTab === tab.id
+                          ? styles.modalTabTextActive
+                          : styles.modalTabText
+                      }
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             {/* Modal Body */}
             <ScrollView
@@ -1023,7 +999,7 @@ export default function Inventory() {
             >
               {editingItem && (
                 <>
-                  {/* ── General Info ── */}
+                  {/* ── General Info ─────────────────────────── */}
                   {activeModalTab === "general" && (
                     <View>
                       <Text style={styles.fieldLabel}>Product Name</Text>
@@ -1048,9 +1024,7 @@ export default function Inventory() {
                         }
                         multiline
                       />
-                      <Text style={styles.fieldLabel}>
-                        Base Price ({"\u20B9"})
-                      </Text>
+                      <Text style={styles.fieldLabel}>Base Price (₹)</Text>
                       <TextInput
                         style={styles.fieldInput}
                         placeholder="0"
@@ -1189,7 +1163,7 @@ export default function Inventory() {
                     </View>
                   )}
 
-                  {/* ── Variants & Price ── */}
+                  {/* ── Variants & Price ─────────────────────── */}
                   {activeModalTab === "variants" && (
                     <View>
                       <View style={styles.sectionHeader}>
@@ -1241,7 +1215,7 @@ export default function Inventory() {
                               <View style={styles.variantPriceRow}>
                                 <View style={{ flex: 1 }}>
                                   <Text style={styles.fieldLabelSm}>
-                                    Price ({"\u20B9"})
+                                    Price (₹)
                                   </Text>
                                   <TextInput
                                     style={styles.fieldInputSm}
@@ -1301,11 +1275,7 @@ export default function Inventory() {
                                 })
                               }
                             >
-                              <MaterialIcons
-                                name="delete-outline"
-                                size={22}
-                                color="#EF4444"
-                              />
+                              <Text style={styles.deleteVariantText}>🗑</Text>
                             </TouchableOpacity>
                           </View>
                         ))
@@ -1313,7 +1283,7 @@ export default function Inventory() {
                     </View>
                   )}
 
-                  {/* ── Media ── */}
+                  {/* ── Media ────────────────────────────────── */}
                   {activeModalTab === "media" && (
                     <View>
                       <Text style={styles.fieldLabel}>Image URL</Text>
@@ -1365,10 +1335,7 @@ export default function Inventory() {
                       </TouchableOpacity>
                       {editingItem.modelGlb ? (
                         <Text
-                          style={[
-                            styles.previewPlaceholderText,
-                            { marginTop: 8 },
-                          ]}
+                          style={[styles.previewPlaceholderText, { marginTop: 8 }]}
                           numberOfLines={1}
                         >
                           {editingItem.modelGlb}
@@ -1377,7 +1344,7 @@ export default function Inventory() {
                     </View>
                   )}
 
-                  {/* ── Ingredients ── */}
+                  {/* ── Ingredients ───────────────────────────── */}
                   {activeModalTab === "ingredients" && (
                     <View>
                       <View style={styles.sectionHeader}>
@@ -1509,11 +1476,7 @@ export default function Inventory() {
                                 })
                               }
                             >
-                              <MaterialIcons
-                                name="delete-outline"
-                                size={22}
-                                color="#EF4444"
-                              />
+                              <Text style={styles.deleteVariantText}>🗑</Text>
                             </TouchableOpacity>
                           </View>
                         ))
@@ -1521,7 +1484,7 @@ export default function Inventory() {
                     </View>
                   )}
 
-                  {/* ── Availability ── */}
+                  {/* ── Availability ──────────────────────────── */}
                   {activeModalTab === "availability" && (
                     <View>
                       <View style={styles.stockToggleCard}>
@@ -1624,103 +1587,26 @@ export default function Inventory() {
               )}
             </ScrollView>
 
-            {/* Modal Actions */}
-            <View style={styles.modalActions}>
+            {/* Modal Footer */}
+            <View style={styles.modalFooter}>
               <TouchableOpacity
-                style={styles.modalBtn}
+                style={styles.discardBtn}
                 onPress={() => {
                   setModalMode(null);
                   setEditingItem(null);
                 }}
               >
-                <Text style={styles.modalBtnText}>Discard</Text>
+                <Text style={styles.discardBtnText}>Discard</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                style={styles.saveBtn}
                 onPress={handleSave}
                 disabled={saving}
               >
                 {saving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text
-                    style={[styles.modalBtnText, styles.modalBtnTextPrimary]}
-                  >
-                    Save Changes
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── SUBCATEGORY MODAL ── */}
-      <Modal visible={showSubCatPopup} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Subcategory</Text>
-
-            <Text style={styles.modalLabel}>Parent Category</Text>
-            <View style={styles.modalDropdown}>
-              {parentCategories.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.modalDropdownItem,
-                    (newSubParentId || parentCategories[0]?.id) === cat.id &&
-                      styles.modalDropdownItemActive,
-                  ]}
-                  onPress={() => setNewSubParentId(cat.id)}
-                >
-                  <Text
-                    style={[
-                      styles.modalDropdownText,
-                      (newSubParentId || parentCategories[0]?.id) === cat.id &&
-                        styles.modalDropdownTextActive,
-                    ]}
-                  >
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.modalLabel}>Subcategory Name</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Pizzas, Burgers"
-              placeholderTextColor="#9CA3AF"
-              value={newSubName}
-              onChangeText={setNewSubName}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalBtn}
-                onPress={() => {
-                  setShowSubCatPopup(false);
-                  setNewSubName("");
-                }}
-              >
-                <Text style={styles.modalBtnText}>Discard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={async () => {
-                  await createSubcategory();
-                  setShowSubCatPopup(false);
-                }}
-                disabled={creatingSub}
-              >
-                {creatingSub ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text
-                    style={[styles.modalBtnText, styles.modalBtnTextPrimary]}
-                  >
-                    Save
-                  </Text>
+                  <Text style={styles.saveBtnText}>Save Changes</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1731,530 +1617,363 @@ export default function Inventory() {
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   STYLES
-   ═══════════════════════════════════════════════════ */
-
+// ── Styles ─────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: AdminColors.background,
+    padding: 16,
   },
-
-  /* ── HEADER ── */
-  headerTopRow: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    marginBottom: 10,
-  },
-  profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#FFF",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: "#FEF3C7",
-  },
-  headerCenter: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "#4B5563",
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.65)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerBtnActive: {
-    backgroundColor: "#FEF3C7",
-  },
-
-  /* ── SEARCH ── */
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
     marginBottom: 12,
+    gap: 10,
+  },
+  headerRowCompact: { flexDirection: "column", alignItems: "flex-start" },
+  headerTextBlock: { alignItems: "flex-start" },
+  title: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 4,
+    color: AdminColors.text,
+  },
+  titleCompact: { marginBottom: 2 },
+  subtitle: { fontSize: 12, color: "#6b7280", fontWeight: "600" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerActionsCompact: {
+    width: "100%",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+  },
+  archiveToggle: {
+    backgroundColor: "#f2f2f2",
+    borderRadius: 20,
     paddingHorizontal: 16,
-    marginTop: 4,
-  },
-  searchBarWrapper: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderColor: "#e5e7eb",
   },
-  searchBar: {
-    flex: 1,
+  archiveToggleActive: { backgroundColor: "#fff7ed", borderColor: "#f59e0b" },
+  archiveToggleText: {
+    color: AdminColors.text,
+    fontWeight: "700",
     fontSize: 14,
-    color: "#1F2937",
-    height: "100%" as any,
-    fontWeight: "500",
   },
-  selectAllBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    height: 44,
-    paddingHorizontal: 12,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+  archiveToggleTextActive: { color: "#b45309" },
+  newProductBtn: {
+    backgroundColor: AdminColors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  selectAllBtnActive: {
-    borderColor: "#F59E0B",
-    backgroundColor: "#FFFBEB",
-  },
-  selectAllText: {
-    color: "#4B5563",
-    fontWeight: "600",
-    fontSize: 13,
-  },
+  newProductBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 
-  /* ── CATEGORY TABS ── */
-  tabsScroll: { maxHeight: 50 },
+  // Subcategory creation
+  subCatRow: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    padding: 12,
+    marginBottom: 12,
+  },
+  subCatLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#9ca3af",
+    marginBottom: 8,
+  },
+  subCatForm: { gap: 8 },
+  subCatParentBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+    marginRight: 6,
+  },
+  subCatParentBtnActive: { backgroundColor: AdminColors.primary },
+  subCatParentText: { fontSize: 12, fontWeight: "700", color: "#6b7280" },
+  subCatParentTextActive: { color: "#fff" },
+  subCatInputRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  subCatInput: {
+    flex: 1,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+  subCatAddBtn: {
+    backgroundColor: "#111827",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  subCatAddBtnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
+
+  // Tabs
+  tabsScroll: { maxHeight: 52 },
   tabsContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+    marginBottom: 12,
   },
   tab: {
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#FFF",
+    borderRadius: 10,
+    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 4,
+    borderColor: "#e5e7eb",
+    minWidth: 48,
+    alignItems: "center",
   },
-  tabActive: {
-    backgroundColor: "#111827",
-    borderColor: "#111827",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
+  tabActive: { backgroundColor: AdminColors.primary },
   tabText: {
-    color: "#4B5563",
+    color: "#888",
     fontWeight: "600",
-    fontSize: 13,
     textTransform: "capitalize",
+    textAlign: "center",
   },
-  tabTextActive: {
-    color: "#FFF",
-    fontWeight: "700",
+  tabTextActive: { color: "#fff" },
+
+  // Search
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+  },
+  selectAll: { flexDirection: "row", alignItems: "center", gap: 8 },
+  selectAllText: { color: "#6b7280", fontWeight: "600" },
+  searchBar: {
+    backgroundColor: "#f2f2f2",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    color: AdminColors.text,
+    flex: 1,
   },
 
-  /* ── BULK BANNER ── */
-  archiveBanner: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  // Bulk
+  bulkBanner: {
+    backgroundColor: "#0f172a",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
-    marginHorizontal: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  restoreBanner: { backgroundColor: "#1E3A8A" },
-  archiveBannerText: { color: "#F9FAFB", fontWeight: "600", fontSize: 13 },
-  archiveBannerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  bulkBannerRestore: { backgroundColor: "#0b132b" },
+  bulkBannerText: {
+    color: "#e2e8f0",
+    fontWeight: "700",
+    marginRight: 8,
   },
+  bulkActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   bulkBtnRed: {
     backgroundColor: "#dc2626",
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   bulkBtnGreen: {
     backgroundColor: "#059669",
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 8,
+    borderRadius: 10,
+  },
+  bulkBtnDefault: {
+    backgroundColor: "#1f2937",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
   },
   bulkBtnText: { color: "#fff", fontWeight: "700", fontSize: 11 },
-  archiveItemsBtn: {
-    backgroundColor: "#374151",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  archiveItemsBtnText: { color: "#FFF", fontWeight: "700", fontSize: 12 },
-  bannerClose: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
+  bulkClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
   },
+  bulkCloseText: { color: "#fff", fontWeight: "700" },
 
-  /* ── LOADING / ERROR ── */
+  // Loading / error
   loadingBox: { alignItems: "center", paddingVertical: 40 },
-  loadingText: { marginTop: 10, color: "#6b7280", fontWeight: "600" } as any,
-  errorText: {
-    color: "#dc2626",
-    marginHorizontal: 16,
-    marginBottom: 8,
-    textAlign: "center",
-  },
+  loadingText: { marginTop: 10, color: "#6b7280", fontWeight: "600" },
+  errorText: { color: "#dc2626", marginBottom: 8 },
 
-  /* ── CARD GRID ── */
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-    paddingTop: 8,
-  },
+  // Card
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 10,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-    aspectRatio: 1,
-  },
-  cardOutOfStock: { opacity: 0.6 },
-  imageWrapper: {
-    width: "100%",
-    height: "58%",
-    marginBottom: 8,
-    position: "relative",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 16,
-    backgroundColor: "#F3F4F6",
-    resizeMode: "cover",
-  },
-  modelBadge: {
-    position: "absolute",
-    bottom: 8,
-    left: 8,
-    backgroundColor: "#4f46e5",
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  modelBadgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
-  editBtnOverlay: {
-    position: "absolute",
-    bottom: 8,
-    right: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFF",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  checkboxArea: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    zIndex: 2,
-  },
-  cardContent: {
-    flex: 1,
-    justifyContent: "flex-start",
-    paddingHorizontal: 4,
-  },
-  name: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 2,
-    lineHeight: 20,
-  },
-  sub: {
-    fontSize: 12,
-    color: "#6B7280",
-    fontWeight: "500",
-    marginBottom: 6,
-  },
-  cardBottom: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: "auto" as any,
+    padding: 12,
+    backgroundColor: AdminColors.card,
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  price: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#059669",
+  cardOutOfStock: { opacity: 0.6 },
+  checkbox: { marginRight: 8 },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: AdminColors.secondary,
+    backgroundColor: "#fff",
   },
-  oosBadge: {
-    backgroundColor: "#fff1f2",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#fecdd3",
+  checkboxChecked: {
+    backgroundColor: AdminColors.primary,
+    borderColor: AdminColors.primary,
   },
-  oosBadgeText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#be123c",
-    textTransform: "uppercase",
-  },
-  inStockBadge: {
-    backgroundColor: "#ecfdf5",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#a7f3d0",
-  },
-  inStockText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#059669",
-    textTransform: "uppercase",
-  },
-  emptyState: {
+  imageBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 12,
+    overflow: "hidden",
+  },
+  image: { width: 52, height: 52, borderRadius: 10 },
+  modelBadge: {
+    position: "absolute",
+    bottom: 2,
+    left: 2,
+    backgroundColor: "#4f46e5",
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  modelBadgeText: { color: "#fff", fontSize: 8, fontWeight: "800" },
+  name: { fontSize: 15, fontWeight: "700", color: AdminColors.text },
+  desc: { color: "#666", fontSize: 12, marginTop: 2 },
+  price: { fontWeight: "800", color: AdminColors.text, marginTop: 2 },
+  cardMeta: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  categoryText: {
+    fontSize: 11,
+    color: "#9ca3af",
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  subCategoryText: { fontSize: 11, color: "#9ca3af" },
+  allergenChips: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 4,
+  },
+  allergenChip: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#fef3c7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  allergenChipText: { fontSize: 9, fontWeight: "800", color: "#92400e" },
+  allergenMore: {
+    fontSize: 10,
+    color: "#92400e",
+    fontWeight: "700",
+    marginLeft: 2,
+  },
+  cardActions: { alignItems: "flex-end", gap: 6 },
+  stockBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  stockBadgeOOS: { backgroundColor: "#fff1f2", borderColor: "#fecdd3" },
+  stockBadgeIn: { backgroundColor: "#ecfdf5", borderColor: "#a7f3d0" },
+  stockBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  stockTextOOS: { color: "#be123c" },
+  stockTextIn: { color: "#059669" },
+  editBtn: { padding: 6 },
+  editIcon: { fontSize: 18 },
+  listContent: { paddingBottom: 12 },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "flex-start",
     paddingVertical: 40,
   },
   emptyStateText: {
-    color: "#9CA3AF",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-
-  /* ── FAB ── */
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    backgroundColor: "#F59E0B",
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
-    zIndex: 15,
-  },
-  fabMenuContainer: {
-    position: "absolute",
-    bottom: 90,
-    right: 24,
-    width: 210,
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    paddingVertical: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-    zIndex: 20,
-    maxHeight: 400,
-  },
-  fabMenuScroll: { paddingHorizontal: 8 },
-  fabMenuItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginVertical: 1,
-  },
-  fabMenuItemActive: { backgroundColor: "#FEF3C7" },
-  fabMenuText: { fontSize: 14, color: "#374151", fontWeight: "600" },
-  fabMenuTextActive: { color: "#92400E", fontWeight: "800" },
-
-  /* ── MODAL ── */
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "#FFF",
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-    maxHeight: "80%",
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    marginBottom: 20,
-    color: "#111827",
+    color: "#6b7280",
+    fontWeight: "600",
     textAlign: "center",
   },
-  modalTabs: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 20,
-    justifyContent: "center",
-  },
-  modalTab: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
-  },
-  modalTabActive: {
-    backgroundColor: "#111827",
-  },
-  modalTabText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4B5563",
-  },
-  modalTabTextActive: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFF",
-  },
-  modalLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  modalInput: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#111827",
-    marginBottom: 14,
-  },
-  modalDropdown: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  modalDropdownItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  modalDropdownItemActive: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#F59E0B",
-  },
-  modalDropdownText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4B5563",
-  },
-  modalDropdownTextActive: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#92400E",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 20,
-  },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-  },
-  modalBtnPrimary: {
-    backgroundColor: "#F59E0B",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  modalBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4B5563",
-  },
-  modalBtnTextPrimary: {
-    color: "#FFF",
-  },
-  modalBody: { paddingVertical: 8 },
 
-  /* ── FIELDS ── */
+  // ── Modal ──────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    maxHeight: "90%",
+    overflow: "hidden",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: AdminColors.text,
+  },
+  modalSubtitle: { fontSize: 11, color: "#9ca3af", marginTop: 2 },
+  modalCloseBtn: { fontSize: 20, color: "#9ca3af", padding: 6 },
+  modalTabScroll: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  modalTabs: { flexDirection: "row", paddingHorizontal: 16, gap: 4 },
+  modalTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  modalTabActive: { borderBottomColor: AdminColors.primary },
+  modalTabText: { color: "#9ca3af", fontWeight: "700", fontSize: 12 },
+  modalTabTextActive: {
+    color: AdminColors.primary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  modalBody: { paddingHorizontal: 20, paddingVertical: 16 },
+
+  // Fields
   fieldLabel: {
     fontSize: 10,
     fontWeight: "800",
@@ -2270,7 +1989,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
-    color: "#111827",
+    color: AdminColors.text,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     marginBottom: 4,
@@ -2289,7 +2008,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     fontSize: 14,
-    color: "#111827",
+    color: AdminColors.text,
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
@@ -2303,11 +2022,11 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   chipActive: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#F59E0B",
+    backgroundColor: AdminColors.primary,
+    borderColor: AdminColors.primary,
   },
-  chipText: { color: "#4B5563", fontWeight: "700", fontSize: 12 },
-  chipTextActive: { color: "#92400E", fontWeight: "700", fontSize: 12 },
+  chipText: { color: "#6b7280", fontWeight: "700", fontSize: 12 },
+  chipTextActive: { color: "#fff", fontWeight: "700", fontSize: 12 },
   allergenGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2323,18 +2042,18 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   allergenBtnActive: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#EF4444",
+    backgroundColor: AdminColors.primary,
+    borderColor: AdminColors.primary,
   },
-  allergenText: { color: "#4B5563", fontWeight: "600", fontSize: 11 },
-  allergenTextActive: { color: "#B91C1C", fontWeight: "700", fontSize: 11 },
+  allergenText: { color: "#6b7280", fontWeight: "700", fontSize: 11 },
+  allergenTextActive: { color: "#fff", fontWeight: "700", fontSize: 11 },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
   },
-  sectionTitle: { fontWeight: "800", color: "#111827" },
+  sectionTitle: { fontWeight: "800", color: AdminColors.text },
   addVariantBtn: {
     backgroundColor: "#eef2ff",
     paddingHorizontal: 12,
@@ -2360,6 +2079,7 @@ const styles = StyleSheet.create({
   },
   variantPriceRow: { flexDirection: "row", marginTop: 8 },
   deleteVariantBtn: { padding: 8, marginLeft: 8 },
+  deleteVariantText: { fontSize: 18 },
   unitRow: { flexDirection: "row", gap: 4 },
   unitBtn: {
     paddingHorizontal: 8,
@@ -2418,6 +2138,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 12,
   },
+  modelReadyBox: {
+    marginTop: 10,
+    backgroundColor: "#eef2ff",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  modelReadyText: {
+    color: "#4f46e5",
+    fontWeight: "800",
+    fontSize: 12,
+    textTransform: "uppercase",
+  },
   stockToggleCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -2427,7 +2160,7 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
     padding: 14,
   },
-  stockToggleTitle: { fontWeight: "700", color: "#111827" },
+  stockToggleTitle: { fontWeight: "700", color: AdminColors.text },
   stockToggleSub: { fontSize: 11, color: "#9ca3af", marginTop: 2 },
   daysRow: {
     flexDirection: "row",
@@ -2462,4 +2195,29 @@ const styles = StyleSheet.create({
   },
   restoreActionBtn: { backgroundColor: "#eef2ff", borderColor: "#c7d2fe" },
   archiveActionText: { fontWeight: "700", fontSize: 12, color: "#4b5563" },
+  modalFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+    gap: 10,
+  },
+  discardBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+  },
+  discardBtnText: { color: "#6b7280", fontWeight: "700" },
+  saveBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#111827",
+    minWidth: 120,
+    alignItems: "center",
+  },
+  saveBtnText: { color: "#fff", fontWeight: "700" },
 });

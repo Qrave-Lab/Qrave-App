@@ -15,14 +15,20 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import { login as apiLogin } from "../lib/apiClient";
+import { supabase } from "../lib/supabaseClient";
+import { syncBackendSessionForGoogleUser } from "../lib/googleBackendBridge";
 
 const { width, height } = Dimensions.get("window");
 const THEME_COLOR = "#F4B400";
 const THEME_DARK = "#E5A800";
 const BASE_URL = "https://qrave-backend.onrender.com";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const EmailIcon = ({ color = "#999" }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -180,7 +186,7 @@ export default function LoginScreen() {
           ? "/waiter"
           : isKitchen
             ? "/kitchen"
-            : "/dashboard";
+            : "/admin";
       router.replace(target);
     } catch (err) {
       const msg = err?.body?.message || err.message || "Login failed";
@@ -263,6 +269,118 @@ export default function LoginScreen() {
       return;
     }
     doSignup();
+  };
+
+  const getParamFromUrl = (url, key) => {
+    if (!url) return null;
+    const match = url.match(new RegExp(`[?#&]${key}=([^&#]+)`));
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
+  const signInWithGoogle = async () => {
+    if (!supabase) {
+      setError("Supabase env is missing. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY");
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const redirectTo = Linking.createURL("auth/callback");
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+
+      if (oauthError) throw oauthError;
+      if (!data?.url) throw new Error("Failed to start Google sign-in");
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== "success" || !result.url) {
+        throw new Error(`Google sign-in did not return to app. Expected redirect: ${redirectTo}`);
+      }
+
+      const code = getParamFromUrl(result.url, "code");
+      const accessToken = getParamFromUrl(result.url, "access_token");
+      const refreshToken = getParamFromUrl(result.url, "refresh_token");
+
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) throw exchangeError;
+      } else if (accessToken && refreshToken) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError) throw sessionError;
+      } else {
+        throw new Error("Google sign-in callback did not return a valid session");
+      }
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (user) {
+        // Google auth should not reuse any previous backend JWT state.
+        await AsyncStorage.multiRemove([
+          "qrave_jwt",
+          "qrave_refresh",
+          "qrave_csrf",
+          "token",
+        ]);
+
+        const role =
+          user?.user_metadata?.role ||
+          user?.app_metadata?.role ||
+          null;
+        const appUser = { ...user, role };
+        await AsyncStorage.setItem("user", JSON.stringify(appUser));
+
+        const backendSession = await syncBackendSessionForGoogleUser(user, {
+          ensureSignup: false,
+        });
+
+        if (!role) {
+          router.replace("/setup");
+          return;
+        }
+
+        if (!backendSession.ok) {
+          setError("Google auth worked, but backend account is not linked yet. Complete setup once.");
+          router.replace("/setup");
+          return;
+        }
+
+        const isAdmin = role === "owner" || role === "manager";
+        const isWaiter = role === "waiter";
+        const isKitchen = role === "kitchen" || role === "chef";
+        const target = isAdmin
+          ? "/admin"
+          : isWaiter
+            ? "/waiter"
+            : isKitchen
+              ? "/kitchen"
+              : "/admin";
+        router.replace(target);
+        return;
+      }
+
+      router.replace("/admin");
+    } catch (err) {
+      setError(err?.message || "Google sign-in failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const welcomeTitle =
@@ -456,7 +574,11 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.socialContainer}>
-                <Pressable style={({ pressed }) => [styles.socialButton, pressed && styles.socialButtonPressed]}>
+                <Pressable
+                  style={({ pressed }) => [styles.socialButton, pressed && styles.socialButtonPressed]}
+                  onPress={signInWithGoogle}
+                  disabled={isLoading}
+                >
                   <Svg width={20} height={20} viewBox="0 0 24 24">
                     <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                     <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />

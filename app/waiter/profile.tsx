@@ -13,6 +13,8 @@ import {
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import WaiterWavyHeader from "../../components/WaiterWavyHeader";
+import LogoutButton from "../../components/LogoutButton";
 
 type Profile = {
   name?: string;
@@ -46,40 +48,64 @@ const formatDate = (value?: string) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: WaiterColors.background },
-  header: { padding: 16, paddingBottom: 8 },
-  title: { fontSize: 22, fontWeight: "800", color: WaiterColors.text },
-  subtitle: { color: "#475569", marginTop: 4 },
+  container: { flex: 1, backgroundColor: "#F8FAFB" },
   card: {
-    backgroundColor: WaiterColors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  label: { fontSize: 11, fontWeight: "700", color: "#94A3B8", textTransform: "uppercase" },
-  value: { fontSize: 15, fontWeight: "700", color: WaiterColors.text, marginTop: 6 },
-  row: { marginBottom: 12 },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: WaiterColors.primary,
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+  },
+  value: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: WaiterColors.text,
+    marginTop: 6,
+  },
+  row: { marginBottom: 14 },
   input: {
     backgroundColor: "#F8FAFC",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     color: WaiterColors.text,
     marginTop: 6,
+    fontSize: 15,
   },
   saveBtn: {
     backgroundColor: WaiterColors.primary,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: "center",
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { color: "#fff", fontWeight: "800" },
+  saveBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   loadingBox: { alignItems: "center", paddingTop: 40 },
   loadingText: { marginTop: 8, color: "#64748B" },
   emptyText: { color: "#64748B", textAlign: "center" },
@@ -154,7 +180,10 @@ export default function WaiterProfile() {
             restaurant_city:
               user?.restaurant_city || user?.restaurantCity || user?.city || "",
             restaurant_state:
-              user?.restaurant_state || user?.restaurantState || user?.state || "",
+              user?.restaurant_state ||
+              user?.restaurantState ||
+              user?.state ||
+              "",
             restaurant_country:
               user?.restaurant_country ||
               user?.restaurantCountry ||
@@ -216,10 +245,40 @@ export default function WaiterProfile() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
-        <Text style={styles.subtitle}>Edit name/phone only</Text>
-      </View>
+      <WaiterWavyHeader height={140}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+          }}
+        >
+          <View>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "900",
+                color: "#fff",
+                letterSpacing: -0.5,
+              }}
+            >
+              Profile
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: "rgba(255,255,255,0.85)",
+                fontWeight: "600",
+                marginTop: 2,
+              }}
+            >
+              Edit name/phone only
+            </Text>
+          </View>
+          <LogoutButton />
+        </View>
+      </WaiterWavyHeader>
 
       {loading ? (
         <View style={styles.loadingBox}>
@@ -241,6 +300,7 @@ export default function WaiterProfile() {
           }
         >
           <View style={styles.card}>
+            <Text style={styles.sectionLabel}>Edit Info</Text>
             <View style={styles.row}>
               <Text style={styles.label}>Name (Editable)</Text>
               <TextInput

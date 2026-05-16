@@ -2,14 +2,9 @@ import React, { useCallback, useState } from "react";
 import { View, Text, FlatList, StyleSheet, RefreshControl } from "react-native";
 import { AdminColors } from "../../constants/theme";
 
-const staff = [
-  { id: "1", name: "Alice", role: "Manager", online: true },
-  { id: "2", name: "Bob", role: "Chef", online: false },
-  { id: "3", name: "Clara", role: "Waiter", online: true },
-];
-
 export default function Staff() {
   const [refreshing, setRefreshing] = useState(false);
+  const [staff] = useState<any[]>([]);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await new Promise((r) => setTimeout(r, 400));
@@ -22,6 +17,11 @@ export default function Staff() {
       <FlatList
         data={staff}
         keyExtractor={(i) => i.id}
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyText}>No staff members yet.</Text>
+          </View>
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -74,6 +74,14 @@ const styles = StyleSheet.create({
   },
   name: { fontWeight: "700", color: AdminColors.text },
   role: { color: "#6b7280" },
+  emptyWrap: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  emptyText: {
+    color: "#6b7280",
+    fontWeight: "600",
+  },
   status: {
     paddingHorizontal: 10,
     paddingVertical: 6,

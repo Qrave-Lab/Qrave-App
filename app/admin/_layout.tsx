@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { MaterialIcons } from "@expo/vector-icons";
 import { HapticTab } from "../../components/haptic-tab";
 import { useColorScheme } from "../../hooks/use-color-scheme";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, useRouter, useSegments } from "expo-router";
 import {
+  BackHandler,
   Platform,
   StyleSheet,
   Text,
@@ -17,11 +18,12 @@ import {
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
   "customize-tables": { icon: "table-restaurant", label: "Floor" },
   inventory: { icon: "inventory", label: "Menu" },
+  takeaway: { icon: "delivery-dining", label: "Orders" },
   sales: { icon: "insights", label: "Sales" },
 };
 
 function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const visibleTabs = ["customize-tables", "inventory", "sales"];
+  const visibleTabs = ["customize-tables", "inventory", "takeaway", "sales"];
 
   return (
     <View style={styles.tabBarContainer}>
@@ -69,7 +71,42 @@ function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 export default function AdminTabLayout() {
   useColorScheme();
   const router = useRouter();
+  const segments = useSegments();
   const [checkedAuth, setCheckedAuth] = useState(false);
+
+  /* ── Settings sub-screens: names that should back-navigate to profile ── */
+  const SETTINGS_SUB_SCREENS = new Set([
+    "profile-details",
+    "qr-codes",
+    "staff",
+    "settings-devices",
+    "settings-takeaway",
+    "settings-team-members",
+    "settings-offers",
+    "settings-kitchen",
+    "settings-audit",
+    "settings-branches",
+    "settings-access-control",
+    "settings-feedback",
+    "settings-delivery-zones",
+    "billing",
+    "settings-floor-plan",
+    "subscription",
+    "delete-account",
+  ]);
+
+  /* ── Android hardware back → Settings Hub when on a sub-screen ── */
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const currentScreen = segments[segments.length - 1];
+    if (!currentScreen || !SETTINGS_SUB_SCREENS.has(currentScreen)) return;
+    const handler = () => {
+      router.replace("/admin/profile");
+      return true; // prevent default back
+    };
+    const sub = BackHandler.addEventListener("hardwareBackPress", handler);
+    return () => sub.remove();
+  }, [segments, router]);
 
   useEffect(() => {
     let mounted = true;
@@ -124,14 +161,29 @@ export default function AdminTabLayout() {
       >
         <Tabs.Screen name="customize-tables" options={{ title: "Floor" }} />
         <Tabs.Screen name="inventory" options={{ title: "Menu" }} />
+        <Tabs.Screen name="takeaway" options={{ title: "Orders" }} />
         <Tabs.Screen name="sales" options={{ title: "Sales" }} />
         <Tabs.Screen
           name="profile"
           options={{ title: "Profile", href: null }}
         />
+        <Tabs.Screen name="profile-details" options={{ href: null }} />
         <Tabs.Screen name="qr-codes" options={{ href: null }} />
         <Tabs.Screen name="staff" options={{ href: null }} />
+        <Tabs.Screen name="settings-devices" options={{ href: null }} />
+        <Tabs.Screen name="settings-takeaway" options={{ href: null }} />
+        <Tabs.Screen name="settings-team-members" options={{ href: null }} />
+        <Tabs.Screen name="settings-offers" options={{ href: null }} />
+        <Tabs.Screen name="settings-kitchen" options={{ href: null }} />
+        <Tabs.Screen name="settings-audit" options={{ href: null }} />
+        <Tabs.Screen name="settings-branches" options={{ href: null }} />
+        <Tabs.Screen name="settings-access-control" options={{ href: null }} />
+        <Tabs.Screen name="settings-feedback" options={{ href: null }} />
+        <Tabs.Screen name="settings-delivery-zones" options={{ href: null }} />
         <Tabs.Screen name="billing" options={{ href: null }} />
+        <Tabs.Screen name="settings-floor-plan" options={{ href: null }} />
+        <Tabs.Screen name="subscription" options={{ href: null }} />
+        <Tabs.Screen name="delete-account" options={{ href: null }} />
       </Tabs>
     </View>
   );

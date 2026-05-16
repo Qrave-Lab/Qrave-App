@@ -142,54 +142,64 @@ export default function SplashScreen() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         style={styles.flatList}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        bounces={false}
+        scrollEventThrottle={16}
+        decelerationRate="fast"
       />
 
-      <View style={styles.heroImageWrapper}>
-        <Image
-          source={require("../assets/images/splash-hero.png")}
-          style={styles.heroImage}
-          contentFit="contain"
-        />
-      </View>
-
-      <SafeAreaView edges={["bottom"]} style={styles.bottomSection}>
-        <View style={styles.indicatorContainer}>
-          {slides.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.indicator,
-                currentIndex === index && styles.indicatorActive,
-              ]}
-            />
-          ))}
+      <View pointerEvents="box-none" style={styles.overlayContainer}>
+        <View pointerEvents="none" style={styles.heroImageWrapper}>
+          <Image
+            source={require("../assets/images/splash-hero.png")}
+            style={styles.heroImage}
+            contentFit="contain"
+          />
         </View>
 
-        <Pressable
-          style={styles.primaryButton}
-          onPress={() => router.push("/login")}
-        >
-          <Text style={styles.primaryButtonText}>Phone number or email</Text>
-        </Pressable>
+        <SafeAreaView edges={["bottom"]} style={styles.bottomSection} pointerEvents="box-none">
+          <View style={styles.indicatorContainer}>
+            {slides.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.indicator,
+                  currentIndex === index && styles.indicatorActive,
+                ]}
+              />
+            ))}
+          </View>
 
-        <View style={styles.navRow}>
-          {currentIndex > 0 ? (
-            <Pressable style={styles.navButton} onPress={handlePrevious}>
-              <Text style={styles.prevText}>{"<- Previous"}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.navButton} />
-          )}
-
-          <Pressable style={styles.navButton} onPress={handleNext}>
-            <Text style={styles.nextText}>
-              {currentIndex === slides.length - 1
-                ? "Get Started ->"
-                : "Next ->"}
-            </Text>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => router.push("/login")}
+          >
+            <Text style={styles.primaryButtonText}>Phone number or email</Text>
           </Pressable>
-        </View>
-      </SafeAreaView>
+
+          <View style={styles.navRow}>
+            {currentIndex > 0 ? (
+              <Pressable style={styles.navButton} onPress={handlePrevious}>
+                <Text style={styles.prevText}>{"<- Previous"}</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.navButton} />
+            )}
+
+            <Pressable style={styles.navButton} onPress={handleNext}>
+              <Text style={styles.nextText}>
+                {currentIndex === slides.length - 1
+                  ? "Get Started ->"
+                  : "Next ->"}
+              </Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -204,11 +214,12 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: height * 0.45,
-    zIndex: 10,
+    bottom: 0,
+    zIndex: 2,
   },
   slide: {
     width: width,
+    height: height,
   },
   topSection: {
     flex: 1,
@@ -241,6 +252,14 @@ const styles = StyleSheet.create({
     lineHeight: Typography.xl * 1.4,
     marginTop: Spacing.md,
   },
+  overlayContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 5,
+  },
   heroImageWrapper: {
     position: "absolute",
     top: height * WAVE_START_PERCENT - PLATE_SIZE / 2,
@@ -261,7 +280,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.lg,
     alignItems: "center",
-    zIndex: 1,
+    zIndex: 10,
   },
   indicatorContainer: {
     flexDirection: "row",

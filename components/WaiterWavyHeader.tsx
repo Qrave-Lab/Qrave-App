@@ -1,3 +1,4 @@
+
 import React, { useMemo } from "react";
 import {
   Platform,
@@ -9,7 +10,7 @@ import {
 } from "react-native";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-interface AdminWavyHeaderProps {
+interface WaiterWavyHeaderProps {
   title?: string;
   subtitle?: string;
   height?: number;
@@ -17,20 +18,20 @@ interface AdminWavyHeaderProps {
   backgroundColor?: string;
 }
 
-export default function AdminWavyHeader({
+export default function WaiterWavyHeader({
   title,
   subtitle,
   height = 220,
   children,
-  backgroundColor = "#FFC220",
-}: AdminWavyHeaderProps) {
+  backgroundColor = "#0F766E",
+}: WaiterWavyHeaderProps) {
   const { width } = useWindowDimensions();
   const curveHeight = height * 0.85;
   const gradientIds = useMemo(
     () => ({
-      g1: `hdr_g1_${Math.random().toString(36).slice(2, 9)}`,
-      g2: `hdr_g2_${Math.random().toString(36).slice(2, 9)}`,
-      g3: `hdr_g3_${Math.random().toString(36).slice(2, 9)}`,
+      g1: `whdr_g1_${Math.random().toString(36).slice(2, 9)}`,
+      g2: `whdr_g2_${Math.random().toString(36).slice(2, 9)}`,
+      g3: `whdr_g3_${Math.random().toString(36).slice(2, 9)}`,
     }),
     [],
   );
@@ -54,10 +55,11 @@ export default function AdminWavyHeader({
   const path3 = `
     M0,0 
     L${width},0 
-    L${width},${height * 0.85} 
-    C${width * 0.75},${height} ${width * 0.25},${height * 0.75} 0,${height} 
+    L${width},${height * 0.851} 
+    C${width * 0.751},${height} ${width * 0.251},${height * 0.751} 0,${height} 
     Z
   `;
+
 
   return (
     <View style={[styles.container, { height }]}>
@@ -70,16 +72,16 @@ export default function AdminWavyHeader({
         >
           <Defs>
             <LinearGradient id={gradientIds.g1} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#FFECB3" stopOpacity="0.4" />
-              <Stop offset="1" stopColor="#FFD54F" stopOpacity="0.3" />
+              <Stop offset="0" stopColor="#99F6E4" stopOpacity="0.4" />
+              <Stop offset="1" stopColor="#5EEAD4" stopOpacity="0.3" />
             </LinearGradient>
             <LinearGradient id={gradientIds.g2} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#FFC107" stopOpacity="0.5" />
-              <Stop offset="1" stopColor="#FFB300" stopOpacity="0.4" />
+              <Stop offset="0" stopColor="#14B8A6" stopOpacity="0.5" />
+              <Stop offset="1" stopColor="#0D9488" stopOpacity="0.4" />
             </LinearGradient>
             <LinearGradient id={gradientIds.g3} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFD600" stopOpacity="1" />
-              <Stop offset="1" stopColor="#FFAB00" stopOpacity="1" />
+              <Stop offset="0" stopColor="#0F766E" stopOpacity="1" />
+              <Stop offset="1" stopColor="#115E59" stopOpacity="1" />
             </LinearGradient>
           </Defs>
           <Path d={path1} fill={`url(#${gradientIds.g1})`} />
@@ -105,36 +107,27 @@ export default function AdminWavyHeader({
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    backgroundColor: "transparent",
     overflow: "hidden",
+    paddingTop: Platform.OS === "android" || Platform.OS === "ios" ? (StatusBar.currentHeight ?? 24) : 0,
     marginBottom: -2,
   },
   content: {
     flex: 1,
-    paddingTop:
-      Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 10 : 50,
+    justifyContent: "flex-end",
     paddingHorizontal: 20,
-    justifyContent: "flex-start",
+    paddingBottom: 18,
   },
-  defaultContent: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 10,
-  },
+  defaultContent: {},
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
-    color: "#000",
-    letterSpacing: -1,
-    textShadowColor: "rgba(0, 0, 0, 0.05)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 15,
-    color: "#1a1a1a",
-    marginTop: 6,
+    fontSize: 13,
+    color: "rgba(255,255,255,0.85)",
     fontWeight: "600",
-    letterSpacing: 0.3,
+    marginTop: 4,
   },
 });

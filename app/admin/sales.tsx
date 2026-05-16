@@ -19,6 +19,7 @@ import iconPng from "../../assets/images/icon.png";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
 import { AdminColors } from "../../constants/theme";
 import apiClient from "../../lib/apiClient";
+import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 const MaterialIcons = MaterialIcons_ as any;
 
@@ -95,11 +96,14 @@ export default function SalesReports() {
           const rId = u?.restaurantId || u?.restaurant_id || u?.restaurant?.id;
           if (rId) {
             try {
+              const version = await getStoredLogoVersion();
               const res = await fetch(
                 `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
               );
               const data = await res.json();
-              if (data?.logo_url) setLogoUrl(data.logo_url);
+              if (data?.logo_url) {
+                setLogoUrl(withLogoVersion(data.logo_url, version) || "");
+              }
             } catch {}
           }
         }
@@ -301,7 +305,7 @@ export default function SalesReports() {
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.profileAvatar}
-            onPress={() => router.push("/admin/profile")}
+            onPress={() => router.replace("/admin/profile")}
             activeOpacity={0.8}
           >
             {logoUrl ? (
@@ -806,9 +810,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#FFF",
     alignItems: "center",
     justifyContent: "center",
@@ -816,13 +820,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 6,
     elevation: 4,
+    overflow: "hidden",
   },
   profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2.5,
-    borderColor: "#F8CB46",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   headerCenter: {
     flex: 1,

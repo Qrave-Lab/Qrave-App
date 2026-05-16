@@ -39,6 +39,7 @@ import {
 import { useRouter } from "expo-router";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
 import { api } from "../../lib/apiClient";
+import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 type Table = {
   id: string;
@@ -96,6 +97,18 @@ type ActiveOrder = {
 
 type ActiveOrdersResponse = {
   orders: ActiveOrder[];
+};
+
+type ActiveSessionAPI = {
+  session_id: string;
+  table_id: string;
+  table_number: number;
+  started_at?: string;
+  last_active_at?: string;
+};
+
+type ActiveSessionsResponse = {
+  sessions: ActiveSessionAPI[];
 };
 
 type ServiceCallType = "waiter" | "water" | "help";
@@ -247,6 +260,9 @@ export default function CustomizeTables() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([]);
+  const [activeSessionTableNumbers, setActiveSessionTableNumbers] = useState<
+    Set<number>
+  >(new Set());
   const [serviceCalls, setServiceCalls] = useState<ServiceCallAPI[]>([]);
   const parseTotal = (total: string) => {
     if (!total) return 0;
@@ -352,6 +368,7 @@ export default function CustomizeTables() {
       if (tableNumber === undefined) return t;
       const stat = tableOrderStats.get(tableNumber);
       const bg = billGroups.get(tableNumber);
+      const hasActiveSession = activeSessionTableNumbers.has(tableNumber);
 
       // If this table is in a bill group, show combined totals
       if (bg) {
@@ -374,6 +391,17 @@ export default function CustomizeTables() {
         };
       }
 
+      if (!stat && !hasActiveSession) return t;
+      if (!stat && hasActiveSession) {
+        return {
+          ...t,
+          items: t.items ?? 0,
+          total: t.total || "-",
+          status: "occupied",
+          isActive: true,
+          time: t.time || "Just now",
+        };
+      }
       if (!stat) return t;
       return {
         ...t,
@@ -384,7 +412,7 @@ export default function CustomizeTables() {
         time: stat.time || t.time,
       };
     });
-  }, [tablesData, tableOrderStats, billGroups]);
+  }, [tablesData, tableOrderStats, billGroups, activeSessionTableNumbers]);
 
   const tables = useMemo(() => {
     const filtered = tablesWithOrders
@@ -426,7 +454,8 @@ export default function CustomizeTables() {
         const variantSuffix = item.variant_label
           ? ` (${item.variant_label})`
           : "";
-        const orderId = order.id || order.order_id;
+        // Use canonical order UUID for status updates to avoid touching multiple orders.
+        const orderId = order.id;
         if (!orderId) continue;
         next.push({
           id: `${orderId}-${item.menu_item_id}-${item.variant_id}`,
@@ -527,11 +556,13 @@ export default function CustomizeTables() {
     setActivityLoading(true);
     setActivityError(null);
     try {
-      const [ordersRes, serviceRes, salesRes] = await Promise.allSettled([
-        api.get("/api/admin/orders/active"),
-        api.get("/api/admin/service-calls"),
-        api.get("/api/admin/sales/today"),
-      ]);
+      const [ordersRes, serviceRes, salesRes, sessionsRes] =
+        await Promise.allSettled([
+          api.get("/api/admin/orders/active"),
+          api.get("/api/admin/service-calls"),
+          api.get("/api/admin/sales/today"),
+          api.get("/api/admin/sessions/active"),
+        ]);
 
       const errors: string[] = [];
 
@@ -557,8 +588,30 @@ export default function CustomizeTables() {
         errors.push(formatApiError(salesRes.reason, "Sales request failed"));
       }
 
+      const sessionsPayload =
+        sessionsRes.status === "fulfilled"
+          ? (sessionsRes.value as ActiveSessionsResponse | ActiveSessionAPI[])
+          : null;
+      const sessionsList: ActiveSessionAPI[] = Array.isArray(sessionsPayload)
+        ? (sessionsPayload as ActiveSessionAPI[])
+        : Array.isArray((sessionsPayload as ActiveSessionsResponse)?.sessions)
+          ? (sessionsPayload as ActiveSessionsResponse).sessions
+          : [];
+      if (sessionsRes.status === "rejected") {
+        errors.push(
+          formatApiError(sessionsRes.reason, "Active sessions request failed"),
+        );
+      }
+
       setActiveOrders(ordersList);
       setServiceCalls(serviceCallsList);
+      setActiveSessionTableNumbers(
+        new Set(
+          sessionsList
+            .map((s) => Number(s?.table_number))
+            .filter((n) => Number.isFinite(n) && n > 0),
+        ),
+      );
 
       const kitchen = buildKitchenActivities(ordersList);
       const service = buildServiceActivities(serviceCallsList);
@@ -903,7 +956,10 @@ export default function CustomizeTables() {
               `https://qrave-backend.onrender.com/public/restaurants/${me.restaurant_id}/logo`,
             );
             const data = await res.json();
-            if (data.logo_url) setLogoUrl(data.logo_url);
+            if (data.logo_url) {
+              const version = await getStoredLogoVersion();
+              setLogoUrl(withLogoVersion(data.logo_url, version) || "");
+            }
           } catch {}
         }
       } catch {}
@@ -964,7 +1020,7 @@ export default function CustomizeTables() {
           <TouchableOpacity
             style={styles.profileAvatar}
             activeOpacity={0.8}
-            onPress={() => router.push("/admin/profile")}
+            onPress={() => router.replace("/admin/profile")}
           >
             {logoUrl ? (
               <Image
@@ -1249,7 +1305,7 @@ export default function CustomizeTables() {
                         },
                       ]}
                     >
-                      {isFree ? "FREE" : isBillReq ? "Bill Req" : "OCCUPIED"}
+                      {isFree ? "FREE" : isBillReq ? "Bill Req" : "SEATED"}
                     </Text>
                   </View>
                 </View>

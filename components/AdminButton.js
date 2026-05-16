@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function AdminButton({ style }) {
   const router = useRouter();
   return (
-    <TouchableOpacity style={[styles.button, style || {}]} onPress={() => router.push("/admin/profile")}> 
+    <TouchableOpacity style={[styles.button, style || {}]} onPress={() => router.replace("/admin/profile")}> 
       <Ionicons name="shield-checkmark" size={20} color="#fff" style={{ marginRight: 6 }} />
       <Text style={styles.text}>Admin</Text>
     </TouchableOpacity>

@@ -2,13 +2,7 @@ import { MaterialIcons as MaterialIcons_ } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,8 +22,8 @@ import {
 } from "react-native";
 import iconPng from "../../assets/images/icon.png";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
-import { AdminColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
+import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 const MaterialIcons = MaterialIcons_ as any;
 
@@ -119,7 +113,6 @@ const MODAL_TABS: { id: ModalTab; label: string }[] = [
 export default function Inventory() {
   const { width } = useWindowDimensions();
   const router = useRouter();
-  const isCompact = width < 380;
   const CARD_MARGIN = 12;
   const CONTAINER_PADDING = 16;
   const cardWidth = (width - CONTAINER_PADDING * 2 - CARD_MARGIN) / 2;
@@ -130,7 +123,7 @@ export default function Inventory() {
   const [role, setRole] = useState("");
 
   // UI state
-  const [activeCategory, setActiveCategory] = useState("all");
+  const [activeCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -151,12 +144,6 @@ export default function Inventory() {
   const [newSubName, setNewSubName] = useState("");
   const [newSubParentId, setNewSubParentId] = useState("");
   const [creatingSub, setCreatingSub] = useState(false);
-  const tabsRef = useRef<ScrollView>(null);
-  const scrollTabsToStart = useCallback(() => {
-    requestAnimationFrame(() => {
-      tabsRef.current?.scrollTo({ x: 0, animated: true });
-    });
-  }, []);
 
   // ── Derived ──────────────────────────────────────────────────────
   const parentCategories = useMemo(
@@ -175,11 +162,6 @@ export default function Inventory() {
     const subs = getSubcategories(parent.id);
     return subs[0]?.id || parent.id;
   }, [parentCategories, getSubcategories]);
-
-  const categoryTabs = useMemo(
-    () => ["all", ...parentCategories.map((c) => c.name)],
-    [parentCategories],
-  );
 
   const resolveParentName = (item: MenuItem) =>
     item.parentCategoryName || item.categoryName || "Uncategorized";
@@ -225,7 +207,10 @@ export default function Inventory() {
                 `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
               );
               const data = await res.json();
-              if (data?.logo_url) setLogoUrl(data.logo_url);
+              if (data?.logo_url) {
+                const version = await getStoredLogoVersion();
+                setLogoUrl(withLogoVersion(data.logo_url, version) || "");
+              }
             } catch {}
           }
         }
@@ -326,12 +311,6 @@ export default function Inventory() {
     await Promise.all([refreshMenu(true), refreshCategories()]);
     setRefreshing(false);
   }, [refreshMenu, refreshCategories]);
-
-  useEffect(() => {
-    if (activeCategory === "all") {
-      scrollTabsToStart();
-    }
-  }, [activeCategory, scrollTabsToStart]);
 
   // ── Selection ───────────────────────────────────────────────────
   const toggleSelect = (id: string) => {
@@ -667,7 +646,7 @@ export default function Inventory() {
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.profileAvatar}
-            onPress={() => router.push("/admin/profile")}
+            onPress={() => router.replace("/admin/profile")}
             activeOpacity={0.8}
           >
             {logoUrl ? (
@@ -732,12 +711,12 @@ export default function Inventory() {
           <MaterialIcons
             name={allVisibleSelected ? "check-box" : "check-box-outline-blank"}
             size={22}
-            color={allVisibleSelected ? AdminColors.primary : "#9CA3AF"}
+            color={allVisibleSelected ? "#F59E0B" : "#9CA3AF"}
           />
           <Text
             style={[
               styles.selectAllText,
-              allVisibleSelected && { color: AdminColors.primary },
+              allVisibleSelected && { color: "#F59E0B" },
             ]}
           >
             All
@@ -750,7 +729,7 @@ export default function Inventory() {
         <View style={styles.subCatCard}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionIconBg}>
-              <MaterialIcons name="category" size={18} color="#8B5CF6" />
+              <MaterialIcons name="category" size={18} color="#F59E0B" />
             </View>
             <Text style={styles.subCatLabel}>Add Subcategory</Text>
           </View>
@@ -802,38 +781,6 @@ export default function Inventory() {
         </View>
       )}
 
-      {/* ── CATEGORY TABS ── */}
-      <ScrollView
-        ref={tabsRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsScroll}
-        contentContainerStyle={styles.tabsContainer}
-        onContentSizeChange={() => {
-          if (activeCategory === "all") scrollTabsToStart();
-        }}
-      >
-        {categoryTabs.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[styles.tab, activeCategory === cat && styles.tabActive]}
-            onPress={() => {
-              setActiveCategory(cat);
-              if (cat === "all") scrollTabsToStart();
-            }}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeCategory === cat && styles.tabTextActive,
-              ]}
-            >
-              {cat === "all" ? "All" : cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       {/* ── BULK BANNER ── */}
       {selectedCount > 0 && (
         <View
@@ -874,7 +821,7 @@ export default function Inventory() {
       {/* ── LOADING / ERROR ── */}
       {loading && (
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={AdminColors.primary} />
+          <ActivityIndicator size="large" color="#F59E0B" />
           <Text style={styles.loadingText}>Loading menu...</Text>
         </View>
       )}
@@ -893,7 +840,7 @@ export default function Inventory() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={AdminColors.primary}
+            tintColor={"#F59E0B"}
           />
         }
         renderItem={({ item }) => (
@@ -932,7 +879,7 @@ export default function Inventory() {
               <MaterialIcons
                 name={item.selected ? "check-box" : "check-box-outline-blank"}
                 size={24}
-                color={item.selected ? AdminColors.primary : "#D1D5DB"}
+                color={item.selected ? "#F59E0B" : "#D1D5DB"}
               />
             </TouchableOpacity>
 
@@ -990,6 +937,9 @@ export default function Inventory() {
       <Modal visible={!!modalMode} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Golden accent bar */}
+            <View style={styles.modalAccentBar} />
+
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View>
@@ -1693,42 +1643,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     marginBottom: 10,
   },
   profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#FFF",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+    overflow: "hidden",
   },
   profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: "#FEF3C7",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   headerCenter: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
     justifyContent: "center",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
-    letterSpacing: -0.5,
+    fontWeight: "900",
+    color: "#000",
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: "#4B5563",
+    color: "rgba(0,0,0,0.55)",
     fontWeight: "600",
     marginTop: 2,
   },
@@ -1810,9 +1759,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#F3F4F6",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
+    borderColor: "#FEF3C7",
+    shadowColor: "#F59E0B",
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -1825,7 +1774,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#FEF3C7",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
@@ -1842,7 +1791,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     marginRight: 6,
   },
-  subCatParentBtnActive: { backgroundColor: AdminColors.primary },
+  subCatParentBtnActive: { backgroundColor: "#111827" },
   subCatParentText: { fontSize: 12, fontWeight: "700", color: "#6b7280" },
   subCatParentTextActive: { color: "#fff" },
   subCatInputRow: { flexDirection: "row", gap: 8, alignItems: "center" },
@@ -1858,49 +1807,14 @@ const styles = StyleSheet.create({
     color: "#1F2937",
   },
   subCatAddBtn: {
-    backgroundColor: "#111827",
+    backgroundColor: "#F59E0B",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
   },
   subCatAddBtnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
 
-  /* ── CATEGORY TABS ── */
-  tabsScroll: { maxHeight: 50 },
-  tabsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-  },
-  tab: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 4,
-  },
-  tabActive: {
-    backgroundColor: "#111827",
-    borderColor: "#111827",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  tabText: {
-    color: "#4B5563",
-    fontWeight: "600",
-    fontSize: 13,
-    textTransform: "capitalize",
-  },
-  tabTextActive: {
-    color: "#FFF",
-    fontWeight: "700",
-  },
+  /* ── CATEGORY TABS (removed) ── */
 
   /* ── BULK BANNER ── */
   archiveBanner: {
@@ -1976,9 +1890,11 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 16,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
     aspectRatio: 1,
   },
   cardOutOfStock: { opacity: 0.6 },
@@ -2103,28 +2019,47 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderRadius: 20,
+    borderRadius: 24,
     maxHeight: "90%",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  modalAccentBar: {
+    height: 4,
+    backgroundColor: "#F59E0B",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingTop: 18,
+    paddingBottom: 14,
+    backgroundColor: "#FFFBEB",
+    borderBottomWidth: 1,
+    borderBottomColor: "#FEF3C7",
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#111827",
   },
-  modalSubtitle: { fontSize: 11, color: "#9ca3af", marginTop: 2 },
+  modalSubtitle: {
+    fontSize: 11,
+    color: "#92400E",
+    marginTop: 2,
+    fontWeight: "500",
+  },
   modalCloseBtn: { fontSize: 20, color: "#9ca3af", padding: 6 },
   modalTabScroll: {
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
+    backgroundColor: "#FAFAFA",
   },
   modalTabs: { flexDirection: "row", paddingHorizontal: 16, gap: 4 },
   modalTab: {
@@ -2133,10 +2068,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
-  modalTabActive: { borderBottomColor: AdminColors.primary },
+  modalTabActive: { borderBottomColor: "#F59E0B" },
   modalTabText: { color: "#9ca3af", fontWeight: "700", fontSize: 12 },
   modalTabTextActive: {
-    color: AdminColors.primary,
+    color: "#111827",
     fontWeight: "800",
     fontSize: 12,
   },
@@ -2191,8 +2126,8 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   chipActive: {
-    backgroundColor: AdminColors.primary,
-    borderColor: AdminColors.primary,
+    backgroundColor: "#111827",
+    borderColor: "#111827",
   },
   chipText: { color: "#6b7280", fontWeight: "700", fontSize: 12 },
   chipTextActive: { color: "#fff", fontWeight: "700", fontSize: 12 },
@@ -2211,8 +2146,8 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   allergenBtnActive: {
-    backgroundColor: AdminColors.primary,
-    borderColor: AdminColors.primary,
+    backgroundColor: "#111827",
+    borderColor: "#111827",
   },
   allergenText: { color: "#6b7280", fontWeight: "700", fontSize: 11 },
   allergenTextActive: { color: "#fff", fontWeight: "700", fontSize: 11 },
@@ -2224,12 +2159,12 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontWeight: "800", color: "#111827" },
   addVariantBtn: {
-    backgroundColor: "#eef2ff",
+    backgroundColor: "#FEF3C7",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
   },
-  addVariantBtnText: { color: "#4f46e5", fontWeight: "700", fontSize: 12 },
+  addVariantBtnText: { color: "#92400E", fontWeight: "700", fontSize: 12 },
   emptyHint: {
     color: "#9ca3af",
     textAlign: "center",
@@ -2239,10 +2174,10 @@ const styles = StyleSheet.create({
   variantCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#FFFBEB",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#FEF3C7",
     padding: 12,
     marginBottom: 10,
   },
@@ -2255,7 +2190,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "#e5e7eb",
   },
-  unitBtnActive: { backgroundColor: AdminColors.primary },
+  unitBtnActive: { backgroundColor: "#111827" },
   unitText: { fontSize: 11, fontWeight: "700", color: "#6b7280" },
   unitTextActive: { fontSize: 11, fontWeight: "700", color: "#fff" },
   previewImage: {
@@ -2284,35 +2219,35 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: "#c7d2fe",
-    backgroundColor: "#f8faff",
+    borderColor: "#FDE68A",
+    backgroundColor: "#FFFBEB",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
   modelUploadCardReady: {
-    backgroundColor: "#eef2ff",
-    borderColor: "#a5b4fc",
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
   },
   modelUploadTitle: {
-    color: "#4f46e5",
+    color: "#92400E",
     fontWeight: "800",
     fontSize: 14,
   },
   modelUploadSubtitle: {
     marginTop: 4,
-    color: "#818cf8",
+    color: "#D97706",
     fontWeight: "600",
     fontSize: 12,
   },
   stockToggleCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#FFFBEB",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#FEF3C7",
     padding: 14,
   },
   stockToggleTitle: { fontWeight: "700", color: "#111827" },
@@ -2335,8 +2270,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   dayBtnActive: {
-    backgroundColor: AdminColors.primary,
-    borderColor: AdminColors.primary,
+    backgroundColor: "#F59E0B",
+    borderColor: "#F59E0B",
   },
   dayText: { fontSize: 10, fontWeight: "800", color: "#d1d5db" },
   dayTextActive: { fontSize: 10, fontWeight: "800", color: "#fff" },
@@ -2348,7 +2283,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
-  restoreActionBtn: { backgroundColor: "#eef2ff", borderColor: "#c7d2fe" },
+  restoreActionBtn: { backgroundColor: "#FEF3C7", borderColor: "#FDE68A" },
   archiveActionText: { fontWeight: "700", fontSize: 12, color: "#4b5563" },
   modalFooter: {
     flexDirection: "row",
@@ -2356,7 +2291,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderTopColor: "#FEF3C7",
+    backgroundColor: "#FFFBEB",
     gap: 10,
   },
   discardBtn: {
@@ -2364,15 +2300,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   discardBtnText: { color: "#6b7280", fontWeight: "700" },
   saveBtn: {
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#111827",
+    backgroundColor: "#F59E0B",
     minWidth: 120,
     alignItems: "center",
+    shadowColor: "#F59E0B",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   saveBtnText: { color: "#fff", fontWeight: "700" },
 });

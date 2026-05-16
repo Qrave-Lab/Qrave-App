@@ -1,34 +1,74 @@
 // app/login.js
-import React, { useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { makeRedirectUri } from "expo-auth-session";
+import * as Linking from "expo-linking";
+import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  TextInput,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Animated,
-  ActivityIndicator,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import * as Linking from "expo-linking";
-import * as WebBrowser from "expo-web-browser";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
-import { login as apiLogin } from "../lib/apiClient";
-import { supabase } from "../lib/supabaseClient";
+import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
+import { api, login as apiLogin, persistAuthFromResponse } from "../lib/apiClient";
 import { syncBackendSessionForGoogleUser } from "../lib/googleBackendBridge";
+import { supabase } from "../lib/supabaseClient";
 
 const { width, height } = Dimensions.get("window");
 const THEME_COLOR = "#F4B400";
 const THEME_DARK = "#E5A800";
 const BASE_URL = "https://qrave-backend.onrender.com";
 
-WebBrowser.maybeCompleteAuthSession();
+try { WebBrowser.maybeCompleteAuthSession(); } catch {}
+
+// Expo's makeRedirectUri guarantees the correct structure based on dev vs prod.
+// By targeting "login", Expo Router stays on this screen and doesn't unmount it.
+const SUPABASE_REDIRECT = makeRedirectUri({
+  scheme: "adminorderapp",
+  path: "login"
+});
+console.log("SUPABASE_REDIRECT:", SUPABASE_REDIRECT);
+
+const GOOGLE_AUTH_INTENT_KEY = "google_auth_intent";
+const GOOGLE_AUTH_STARTED_AT_KEY = "google_auth_started_at";
+const GOOGLE_AUTH_TIMEOUT_MS = 10 * 60 * 1000;
+
+const parseAuthParamsFromUrl = (url) => {
+  const value = String(url || "");
+  const queryStart = value.indexOf("?");
+  const hashStart = value.indexOf("#");
+  const queryEnd = hashStart >= 0 ? hashStart : value.length;
+  const query = queryStart >= 0 ? value.slice(queryStart + 1, queryEnd) : "";
+  const hash = hashStart >= 0 ? value.slice(hashStart + 1) : "";
+  const queryParams = new URLSearchParams(query);
+  const hashParams = new URLSearchParams(hash);
+  const get = (key) => queryParams.get(key) || hashParams.get(key);
+
+  return {
+    code: get("code"),
+    accessToken: get("access_token"),
+    refreshToken: get("refresh_token"),
+    error: get("error") || get("error_code"),
+    errorDescription: get("error_description"),
+  };
+};
+
+const isGoogleAuthCallbackUrl = (url) => {
+  if (!url) return false;
+  const { code, accessToken, error } = parseAuthParamsFromUrl(url);
+  return Boolean(code || accessToken || error);
+};
 
 const EmailIcon = ({ color = "#999" }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -106,6 +146,11 @@ export default function LoginScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showBranchPicker, setShowBranchPicker] = useState(false);
+  const [branchOptions, setBranchOptions] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [pendingRoute, setPendingRoute] = useState("/admin");
+  const [isSelectingBranch, setIsSelectingBranch] = useState(false);
 
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
@@ -114,6 +159,128 @@ export default function LoginScreen() {
   const buttonScale = useRef(new Animated.Value(1)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardTranslateY = useRef(new Animated.Value(30)).current;
+  const authSessionInProgressRef = useRef(false);
+  const oauthExchangePromisesRef = useRef(new Map());
+  const oauthExchangeResultsRef = useRef(new Map());
+  const handledGoogleUsersRef = useRef(new Set());
+
+  const getStoredGoogleIntent = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(GOOGLE_AUTH_INTENT_KEY);
+      if (stored === "signup" || stored === "login") return stored;
+      return activeTab === "signup" ? "signup" : "login";
+    } catch {
+      return activeTab === "signup" ? "signup" : "login";
+    }
+  };
+
+  const hasRecentGoogleAuthAttempt = async () => {
+    try {
+      const startedAt = Number(await AsyncStorage.getItem(GOOGLE_AUTH_STARTED_AT_KEY));
+      if (!startedAt || Date.now() - startedAt > GOOGLE_AUTH_TIMEOUT_MS) {
+        await AsyncStorage.multiRemove([GOOGLE_AUTH_INTENT_KEY, GOOGLE_AUTH_STARTED_AT_KEY]);
+        return false;
+      }
+      return true;
+    } catch {
+      return authSessionInProgressRef.current;
+    }
+  };
+
+  const completeSupabaseSessionFromUrl = async (url) => {
+    if (!supabase) return null;
+
+    const {
+      code,
+      accessToken,
+      refreshToken,
+      error,
+      errorDescription,
+    } = parseAuthParamsFromUrl(url);
+
+    if (error) {
+      throw new Error(errorDescription || error);
+    }
+
+    if (code) {
+      const exchangeKey = `code:${code}`;
+      const cachedUser = oauthExchangeResultsRef.current.get(exchangeKey);
+      if (cachedUser) return cachedUser;
+
+      const pendingExchange = oauthExchangePromisesRef.current.get(exchangeKey);
+      if (pendingExchange) return pendingExchange;
+
+      const exchangePromise = supabase.auth
+        .exchangeCodeForSession(code)
+        .then(({ data: sessionData, error: exchangeError }) => {
+          if (exchangeError) throw exchangeError;
+          const user = sessionData?.session?.user;
+          if (!user?.email || !user?.id) {
+            throw new Error("Could not get user info from Google sign-in.");
+          }
+          oauthExchangeResultsRef.current.set(exchangeKey, user);
+          return user;
+        })
+        .finally(() => {
+          oauthExchangePromisesRef.current.delete(exchangeKey);
+        });
+
+      oauthExchangePromisesRef.current.set(exchangeKey, exchangePromise);
+      return exchangePromise;
+    }
+
+    if (accessToken) {
+      const { data, error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken || "",
+      });
+      if (sessionError) throw sessionError;
+      const user = data?.session?.user;
+      if (!user?.email || !user?.id) {
+        throw new Error("Could not get user info from Google sign-in.");
+      }
+      return user;
+    }
+
+    return null;
+  };
+
+  useEffect(() => {
+    const loadGoogleAuthError = async () => {
+      try {
+        const stored = await AsyncStorage.getItem("google_auth_error");
+        if (stored) {
+          setError(stored);
+          await AsyncStorage.removeItem("google_auth_error");
+        }
+      } catch {}
+    };
+    loadGoogleAuthError();
+  }, []);
+
+  // Listen for OAuth callbacks that arrive through native deep linking.
+  useEffect(() => {
+    const handleDeepLink = async ({ url }) => {
+      if (!supabase || !isGoogleAuthCallbackUrl(url)) return;
+      const shouldHandle =
+        authSessionInProgressRef.current || (await hasRecentGoogleAuthAttempt());
+      if (!shouldHandle) return;
+
+      try {
+        const user = await completeSupabaseSessionFromUrl(url);
+        if (user?.email && user?.id) {
+          await handleSupabaseGoogleUser(user);
+        }
+      } catch (e) {
+        console.error("[DeepLink] Google OAuth callback error:", e);
+        setError(e?.message || "Could not complete Google sign-in.");
+      }
+    };
+
+    const sub = Linking.addEventListener("url", handleDeepLink);
+    Linking.getInitialURL().then((url) => { if (url) handleDeepLink({ url }); });
+    return () => sub.remove();
+  }, [activeTab]);
 
   useEffect(() => {
     Animated.parallel([
@@ -155,8 +322,87 @@ export default function LoginScreen() {
     }).start();
   };
 
+  const roleToRoute = (role) => {
+    const normalized = String(role || "").toLowerCase();
+    if (normalized === "waiter") return "/waiter";
+    if (normalized === "kitchen" || normalized === "chef") return "/kitchen";
+    return "/admin";
+  };
+
+  const routeAfterLogin = async (role) => {
+    const target = roleToRoute(role);
+    if (target !== "/admin") {
+      router.replace(target);
+      return;
+    }
+
+    try {
+      const [locRes, branchRes] = await Promise.all([
+        api.get("/api/admin/locations"),
+        api.get("/api/admin/branches?include_archived=0"),
+      ]);
+      const locations = Array.isArray(locRes?.locations) ? locRes.locations : [];
+      if (locations.length <= 1) {
+        router.replace(target);
+        return;
+      }
+
+      const addressByRestaurant = {};
+      for (const branch of branchRes?.branches || []) {
+        const address = String(branch?.address || "").trim();
+        if (address) addressByRestaurant[branch.restaurant_id] = address;
+      }
+
+      const options = locations.map((loc) => {
+        const rid = String(loc?.restaurant_id || "");
+        const restaurantName = String(loc?.restaurant || "Branch");
+        const addr = addressByRestaurant[rid];
+        return {
+          id: rid,
+          label: addr ? `${restaurantName} - ${addr}` : restaurantName,
+        };
+      });
+
+      setBranchOptions(options);
+      setSelectedBranchId(String(options[0]?.id || ""));
+      setPendingRoute(target);
+      setShowBranchPicker(true);
+    } catch {
+      router.replace(target);
+    }
+  };
+
+  const handleConfirmBranchSelection = async () => {
+    if (!selectedBranchId || isSelectingBranch) return;
+    setIsSelectingBranch(true);
+    setError("");
+    try {
+      const switchRes = await api.post("/api/admin/locations/switch", {
+        restaurant_id: selectedBranchId,
+      });
+      await persistAuthFromResponse(switchRes);
+      try {
+        const userRaw = await AsyncStorage.getItem("user");
+        if (userRaw) {
+          const user = JSON.parse(userRaw);
+          await AsyncStorage.setItem(
+            "user",
+            JSON.stringify({ ...user, restaurant_id: Number(selectedBranchId) || selectedBranchId }),
+          );
+        }
+      } catch {}
+      setShowBranchPicker(false);
+      router.replace(pendingRoute || "/admin");
+    } catch {
+      setError("Failed to switch branch. Try again.");
+    } finally {
+      setIsSelectingBranch(false);
+    }
+  };
+
   const doLogin = async () => {
-    if (!email || !password) {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!normalizedEmail || !password) {
       setError("Please enter email and password");
       return;
     }
@@ -165,7 +411,7 @@ export default function LoginScreen() {
     setError("");
 
     try {
-      const data = await apiLogin(email, password);
+      const data = await apiLogin(normalizedEmail, password);
       const user = data.user || data;
 
       if (!user) throw new Error("Invalid credentials");
@@ -177,28 +423,41 @@ export default function LoginScreen() {
       }
 
       const role = user?.role;
-      const isAdmin = role === "owner" || role === "manager";
-      const isWaiter = role === "waiter";
-      const isKitchen = role === "kitchen" || role === "chef";
-      const target = isAdmin
-        ? "/admin"
-        : isWaiter
-          ? "/waiter"
-          : isKitchen
-            ? "/kitchen"
-            : "/admin";
-      router.replace(target);
+      await routeAfterLogin(role);
     } catch (err) {
-      const msg = err?.body?.message || err.message || "Login failed";
-      setError(String(msg));
+      const status = Number(err?.status || 0);
+      const rawBody =
+        typeof err?.body === "string"
+          ? err.body
+          : typeof err?.body?.message === "string"
+            ? err.body.message
+            : "";
+      const normalized = String(rawBody || err?.message || "")
+        .trim()
+        .toLowerCase();
+
+      if (status === 401 || normalized.includes("invalid credentials")) {
+        setError("Wrong email or password.");
+      } else if (normalized.includes("network request failed")) {
+        setError("Network error. Please check your internet and try again.");
+      } else {
+        const msg = rawBody || err?.message || "Login failed";
+        setError(String(msg).trim());
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const doSignup = async () => {
-    if (!email || !password || !confirmPassword) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !password || !confirmPassword) {
       setError("Please fill all fields");
+      return;
+    }
+    if (!normalizedEmail.includes("@")) {
+      setError("Enter a valid email");
       return;
     }
     if (password !== confirmPassword) {
@@ -213,48 +472,47 @@ export default function LoginScreen() {
     setIsLoading(true);
     setError("");
     try {
-      const restaurantName = email.includes("@")
-        ? email.split("@")[0]
+      const restaurantName = normalizedEmail.includes("@")
+        ? normalizedEmail.split("@")[0]
         : "Qrave Restaurant";
 
-      const signupRes = await fetch(`${BASE_URL}/auth/signup`, {
+      const emailCheckRes = await fetch(`${BASE_URL}/auth/email_available`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          restaurant_name: restaurantName,
-          restaurant_currency: "INR",
-        }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
-      if (!signupRes.ok) {
-        const errBody = await signupRes.json().catch(() => ({}));
-        throw new Error(errBody.message || "Signup failed");
+      if (!emailCheckRes.ok) {
+        const body = await emailCheckRes.text().catch(() => "");
+        throw new Error(body || "Unable to validate email");
       }
 
-      const signupData = await signupRes.json().catch(() => ({}));
-      const accessToken = signupData.access_token || signupData.accessToken;
-      const refreshToken = signupData.refresh_token || signupData.refreshToken;
-
-      if (accessToken) {
-        await AsyncStorage.setItem("qrave_jwt", accessToken);
-      }
-      if (refreshToken) {
-        await AsyncStorage.setItem("qrave_refresh", refreshToken);
+      const emailCheck = await emailCheckRes.json().catch(() => ({}));
+      if (emailCheck?.available === false) {
+        throw new Error("This email is already registered");
       }
 
       const otpRes = await fetch(`${BASE_URL}/public/otp/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       if (!otpRes.ok) {
         const body = await otpRes.text().catch(() => "");
         throw new Error(body || "Failed to send verification code");
       }
 
-      router.push({ pathname: "/verify", params: { email } });
+      await AsyncStorage.setItem(
+        "pending_signup",
+        JSON.stringify({
+          email: normalizedEmail,
+          password,
+          restaurant_name: restaurantName,
+          restaurant_currency: "INR",
+        }),
+      );
+
+      router.push({ pathname: "/verify", params: { email: normalizedEmail } });
     } catch (err) {
       const msg = err?.message || "Signup failed";
       setError(String(msg));
@@ -271,114 +529,139 @@ export default function LoginScreen() {
     doSignup();
   };
 
-  const getParamFromUrl = (url, key) => {
-    if (!url) return null;
-    const match = url.match(new RegExp(`[?#&]${key}=([^&#]+)`));
-    return match ? decodeURIComponent(match[1]) : null;
+  // Handle Google auth using Supabase session user data
+  const handleSupabaseGoogleUser = async (user, intentOverride) => {
+    const intent = intentOverride || (await getStoredGoogleIntent());
+    const handledKey = `${intent}:${user?.id || user?.email || "unknown"}`;
+    if (handledGoogleUsersRef.current.has(handledKey)) return;
+    handledGoogleUsersRef.current.add(handledKey);
+
+    try {
+      setIsLoading(true);
+      // Clear any previous auth tokens
+      await AsyncStorage.multiRemove(["qrave_jwt", "qrave_refresh", "qrave_csrf", "token"]);
+
+      const googleUser = { email: user.email, id: user.id };
+      const restaurantName = user.email.includes("@") ? user.email.split("@")[0] : "My Restaurant";
+
+      const result = await syncBackendSessionForGoogleUser(googleUser, {
+        ensureSignup: intent === "signup",
+        restaurantName,
+      });
+
+      if (!result.ok) {
+        handledGoogleUsersRef.current.delete(handledKey);
+        if (intent === "login") {
+          setError("No account found with this Google account. Please sign up first.");
+        } else {
+          setError(result.message || "Google sign-up failed");
+        }
+        return;
+      }
+
+      const me = await api.get("/api/admin/me").catch(() => null);
+      const role = me?.role || null;
+      const appUser = { ...(me || {}), ...user.user_metadata, email: user.email, id: user.id, role };
+      await AsyncStorage.setItem("user", JSON.stringify(appUser));
+      await AsyncStorage.multiRemove([GOOGLE_AUTH_INTENT_KEY, GOOGLE_AUTH_STARTED_AT_KEY]);
+
+      if (!role) {
+        router.replace("/setup");
+        return;
+      }
+      await routeAfterLogin(role);
+    } catch (err) {
+      handledGoogleUsersRef.current.delete(handledKey);
+      console.error("[GoogleAuth] Error:", err);
+      setError(err?.message || "Google auth failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const signInWithGoogle = async () => {
     if (!supabase) {
-      setError("Supabase env is missing. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY");
+      setError("Supabase is not configured. Check your environment variables.");
       return;
     }
-
     setIsLoading(true);
     setError("");
-
+    authSessionInProgressRef.current = true;
     try {
-      const redirectTo = Linking.createURL("auth/callback");
+      const intent = activeTab === "login" ? "login" : "signup";
+      await AsyncStorage.multiSet([
+        [GOOGLE_AUTH_INTENT_KEY, intent],
+        [GOOGLE_AUTH_STARTED_AT_KEY, String(Date.now())],
+      ]);
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo,
+          redirectTo: SUPABASE_REDIRECT,
           skipBrowserRedirect: true,
           queryParams: {
-            prompt: "select_account",
+            access_type: "offline",
+            prompt: "consent",
           },
         },
       });
-
       if (oauthError) throw oauthError;
-      if (!data?.url) throw new Error("Failed to start Google sign-in");
-
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      if (result.type !== "success" || !result.url) {
-        throw new Error(`Google sign-in did not return to app. Expected redirect: ${redirectTo}`);
-      }
-
-      const code = getParamFromUrl(result.url, "code");
-      const accessToken = getParamFromUrl(result.url, "access_token");
-      const refreshToken = getParamFromUrl(result.url, "refresh_token");
-
-      if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError) throw exchangeError;
-      } else if (accessToken && refreshToken) {
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (sessionError) throw sessionError;
-      } else {
-        throw new Error("Google sign-in callback did not return a valid session");
-      }
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) throw userError;
-      if (user) {
-        // Google auth should not reuse any previous backend JWT state.
-        await AsyncStorage.multiRemove([
-          "qrave_jwt",
-          "qrave_refresh",
-          "qrave_csrf",
-          "token",
-        ]);
-
-        const role =
-          user?.user_metadata?.role ||
-          user?.app_metadata?.role ||
-          null;
-        const appUser = { ...user, role };
-        await AsyncStorage.setItem("user", JSON.stringify(appUser));
-
-        const backendSession = await syncBackendSessionForGoogleUser(user, {
-          ensureSignup: false,
-        });
-
-        if (!role) {
-          router.replace("/setup");
-          return;
-        }
-
-        if (!backendSession.ok) {
-          setError("Google auth worked, but backend account is not linked yet. Complete setup once.");
-          router.replace("/setup");
-          return;
-        }
-
-        const isAdmin = role === "owner" || role === "manager";
-        const isWaiter = role === "waiter";
-        const isKitchen = role === "kitchen" || role === "chef";
-        const target = isAdmin
-          ? "/admin"
-          : isWaiter
-            ? "/waiter"
-            : isKitchen
-              ? "/kitchen"
-              : "/admin";
-        router.replace(target);
+      if (!data?.url) {
+        await AsyncStorage.multiRemove([GOOGLE_AUTH_INTENT_KEY, GOOGLE_AUTH_STARTED_AT_KEY]);
         return;
       }
 
-      router.replace("/admin");
+      // Capture the callback even when Android reports a cancelled auth session.
+      let fallbackUrl = null;
+      const linkSub = Linking.addEventListener("url", ({ url }) => {
+        if (isGoogleAuthCallbackUrl(url)) {
+          fallbackUrl = url;
+        }
+      });
+
+      let result;
+      try {
+        result = await WebBrowser.openAuthSessionAsync(data.url, SUPABASE_REDIRECT);
+      } catch (e) {
+        console.error("[GoogleAuth] Browser error:", e);
+        linkSub?.remove();
+        throw e;
+      }
+
+      // Brief delay so the deep-link event can arrive if it hasn't yet
+      await new Promise((r) => setTimeout(r, 600));
+      linkSub?.remove();
+
+      const authUrl =
+        result?.type === "success" && result?.url ? result.url : fallbackUrl;
+      console.log("[GoogleAuth] result.type:", result?.type, "| authUrl captured:", !!authUrl);
+
+      if (!authUrl) {
+        // No URL: the Linking listener may have already completed the session.
+        const { data: existing } = await supabase.auth.getSession();
+        if (existing?.session?.user?.email) {
+          await handleSupabaseGoogleUser(existing.session.user, intent);
+          return;
+        }
+        if (result?.type === "cancel") {
+          await AsyncStorage.multiRemove([GOOGLE_AUTH_INTENT_KEY, GOOGLE_AUTH_STARTED_AT_KEY]);
+          setError("");
+        }
+        return;
+      }
+
+      const user = await completeSupabaseSessionFromUrl(authUrl);
+      if (user?.email && user?.id) {
+        await handleSupabaseGoogleUser(user, intent);
+        return;
+      }
+
+      setError("Could not complete Google sign-in. Please try again.");
     } catch (err) {
-      setError(err?.message || "Google sign-in failed");
+      await AsyncStorage.multiRemove([GOOGLE_AUTH_INTENT_KEY, GOOGLE_AUTH_STARTED_AT_KEY]);
+      console.error("[GoogleAuth] Supabase OAuth error:", err);
+      setError(err?.message || "Could not start Google sign-in");
     } finally {
+      authSessionInProgressRef.current = false;
       setIsLoading(false);
     }
   };
@@ -610,6 +893,67 @@ export default function LoginScreen() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showBranchPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBranchPicker(false)}
+      >
+        <View style={styles.branchOverlay}>
+          <View style={styles.branchCard}>
+            <Text style={styles.branchTitle}>Choose Branch</Text>
+            <Text style={styles.branchSubtitle}>
+              Select which location dashboard to open.
+            </Text>
+
+            <ScrollView
+              style={styles.branchList}
+              contentContainerStyle={{ gap: 8 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {branchOptions.map((branch) => (
+                <Pressable
+                  key={branch.id}
+                  onPress={() => setSelectedBranchId(branch.id)}
+                  style={[
+                    styles.branchOption,
+                    selectedBranchId === branch.id && styles.branchOptionActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.branchOptionText,
+                      selectedBranchId === branch.id &&
+                        styles.branchOptionTextActive,
+                    ]}
+                  >
+                    {branch.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <View style={styles.branchActionRow}>
+              <Pressable
+                onPress={handleConfirmBranchSelection}
+                disabled={!selectedBranchId || isSelectingBranch}
+                style={[
+                  styles.branchActionBtn,
+                  (!selectedBranchId || isSelectingBranch) &&
+                    styles.branchActionBtnDisabled,
+                ]}
+              >
+                {isSelectingBranch ? (
+                  <ActivityIndicator color="#111827" />
+                ) : (
+                  <Text style={styles.branchActionText}>Open Dashboard</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -858,5 +1202,81 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontSize: 12,
     textAlign: "center",
+  },
+  branchOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  branchCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  branchTitle: {
+    fontSize: 34,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  branchSubtitle: {
+    marginTop: 6,
+    fontSize: 16,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  branchList: {
+    marginTop: 16,
+    maxHeight: 260,
+  },
+  branchOption: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  branchOptionActive: {
+    borderColor: "#F4B400",
+    backgroundColor: "#FFFBEB",
+  },
+  branchOptionText: {
+    fontSize: 22,
+    color: "#334155",
+    fontWeight: "700",
+  },
+  branchOptionTextActive: {
+    color: "#92400E",
+  },
+  branchActionRow: {
+    marginTop: 18,
+  },
+  branchActionBtn: {
+    height: 54,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F4B400",
+    shadowColor: "#F4B400",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  branchActionBtnDisabled: {
+    opacity: 0.55,
+  },
+  branchActionText: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

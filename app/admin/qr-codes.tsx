@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { useRouter } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -22,8 +23,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import QRCode from "react-native-qrcode-svg";
-import AdminWavyHeader from "../../components/AdminWavyHeader";
 import { AdminColors, Fonts } from "../../constants/theme";
 import apiClient from "../../lib/apiClient";
 
@@ -75,13 +76,13 @@ const getTableUrl = (t: Table | null, restaurantId?: string) => {
 };
 
 export default function QrCodes() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const qrRef = useRef<any>(null);
   const printQrRef = useRef<any>(null);
   const [tables, setTables] = useState<Table[]>([]);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [restaurantId, setRestaurantId] = useState<string>("");
-  const [restaurantName, setRestaurantName] = useState("");
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const [template, setTemplate] = useState("modern");
@@ -116,19 +117,6 @@ export default function QrCodes() {
       if (list.length > 0) setSelectedTable(list[0]);
       const rid = me?.restaurant_id || me?.restaurantId || me?.id || "";
       setRestaurantId(rid);
-      setRestaurantName(me.restaurant || "");
-
-      if (rid) {
-        try {
-          const res = await fetch(
-            `https://qrave-backend.onrender.com/public/restaurants/${rid}/logo`,
-          );
-          const data = await res.json();
-          if (data.logo_url) setLogoUrl(data.logo_url);
-        } catch {
-          setLogoUrl(null);
-        }
-      }
     } catch {
       // ignore for now
     }
@@ -419,23 +407,19 @@ export default function QrCodes() {
   return (
     <View style={styles.screen}>
       {/* ── WAVY HEADER ── */}
-      <AdminWavyHeader height={160}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.profileAvatar}>
-            {logoUrl ? (
-              <Image source={{ uri: logoUrl }} style={styles.profileImage} />
-            ) : (
-              <Text style={{ fontSize: 24 }}>{"\uD83C\uDFEA"}</Text>
-            )}
-          </View>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>QR Flyer Builder</Text>
-            <Text style={styles.headerSubtitle}>
-              Design &amp; Print Table QRs
-            </Text>
-          </View>
-        </View>
-      </AdminWavyHeader>
+      <View
+        style={[styles.header, { paddingTop: Math.max(insets.top + 8, 14) }]}
+      >
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.replace("/admin/profile")}
+        >
+          <MaterialIcons name="arrow-back" size={18} color="#374151" />
+          <Text style={styles.backText}>Back to Settings</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>QR Flyer Builder</Text>
+        <Text style={styles.headerSubtitle}>Design and Print Table QRs</Text>
+      </View>
 
       <ScrollView
         style={styles.scroll}
@@ -824,54 +808,42 @@ export default function QrCodes() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F9FAFB" },
   scroll: { flex: 1 },
+  header: {
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    marginBottom: 8,
+  },
+  backText: {
+    color: "#334155",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   container: {
     paddingHorizontal: 16,
     paddingBottom: 40,
-    paddingTop: 24,
+    paddingTop: 12,
   },
 
   /* HEADER */
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    width: "100%",
-  },
-  profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#FFF",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginRight: 12,
-  },
-  profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: "#FEF3C7",
-  },
-  headerCenter: {
-    flex: 1,
-    justifyContent: "center",
-  },
   headerTitle: {
-    fontSize: 20,
+    color: "#0F172A",
+    fontSize: 24,
     fontWeight: "800",
-    color: "#111827",
-    letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: "#4B5563",
-    fontWeight: "600",
     marginTop: 2,
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   /* CARD */

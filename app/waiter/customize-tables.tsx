@@ -38,6 +38,7 @@ import { ThemedText, type ThemedTextProps } from "../../components/themed-text";
 import { IconSymbol } from "../../components/ui/icon-symbol";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
+import WaiterWavyHeader from "../../components/WaiterWavyHeader";
 
 type Table = {
   id: string;
@@ -95,6 +96,18 @@ type ActiveOrder = {
 
 type ActiveOrdersResponse = {
   orders: ActiveOrder[];
+};
+
+type ActiveSessionAPI = {
+  session_id: string;
+  table_id: string;
+  table_number: number;
+  started_at?: string;
+  last_active_at?: string;
+};
+
+type ActiveSessionsResponse = {
+  sessions: ActiveSessionAPI[];
 };
 
 type ServiceCallType = "waiter" | "water" | "help";
@@ -235,6 +248,9 @@ export default function CustomizeTables() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([]);
+  const [activeSessionTableNumbers, setActiveSessionTableNumbers] = useState<
+    Set<number>
+  >(new Set());
   const [serviceCalls, setServiceCalls] = useState<ServiceCallAPI[]>([]);
   const [todaySales, setTodaySales] = useState<number>(0);
   const [occupiedCount, setOccupiedCount] = useState<number>(0);
@@ -349,6 +365,7 @@ export default function CustomizeTables() {
       if (tableNumber === undefined) return t;
       const stat = tableOrderStats.get(tableNumber);
       const bg = billGroups.get(tableNumber);
+      const hasActiveSession = activeSessionTableNumbers.has(tableNumber);
 
       // If this table is in a bill group, show combined totals
       if (bg) {
@@ -371,6 +388,17 @@ export default function CustomizeTables() {
         };
       }
 
+      if (!stat && !hasActiveSession) return t;
+      if (!stat && hasActiveSession) {
+        return {
+          ...t,
+          items: t.items ?? 0,
+          total: t.total || "-",
+          status: "occupied",
+          isActive: true,
+          time: t.time || "Just now",
+        };
+      }
       if (!stat) return t;
       return {
         ...t,
@@ -381,7 +409,7 @@ export default function CustomizeTables() {
         time: stat.time || t.time,
       };
     });
-  }, [tablesData, tableOrderStats, billGroups]);
+  }, [tablesData, tableOrderStats, billGroups, activeSessionTableNumbers]);
 
   const tables = useMemo(() => {
     const filtered = tablesWithOrders
@@ -423,7 +451,8 @@ export default function CustomizeTables() {
         const variantSuffix = item.variant_label
           ? ` (${item.variant_label})`
           : "";
-        const orderId = order.id || order.order_id;
+        // Use canonical order UUID for status updates to avoid touching multiple orders.
+        const orderId = order.id;
         if (!orderId) continue;
         next.push({
           id: `${orderId}-${item.menu_item_id}-${item.variant_id}`,
@@ -524,11 +553,13 @@ export default function CustomizeTables() {
     setActivityLoading(true);
     setActivityError(null);
     try {
-      const [ordersRes, serviceRes, salesRes] = await Promise.allSettled([
-        api.get("/api/admin/orders/active"),
-        api.get("/api/admin/service-calls"),
-        api.get("/api/admin/sales/today"),
-      ]);
+      const [ordersRes, serviceRes, salesRes, sessionsRes] =
+        await Promise.allSettled([
+          api.get("/api/admin/orders/active"),
+          api.get("/api/admin/service-calls"),
+          api.get("/api/admin/sales/today"),
+          api.get("/api/admin/sessions/active"),
+        ]);
 
       const errors: string[] = [];
 
@@ -560,9 +591,31 @@ export default function CustomizeTables() {
         errors.push(formatApiError(salesRes.reason, "Sales request failed"));
       }
 
+      const sessionsPayload =
+        sessionsRes.status === "fulfilled"
+          ? (sessionsRes.value as ActiveSessionsResponse | ActiveSessionAPI[])
+          : null;
+      const sessionsList: ActiveSessionAPI[] = Array.isArray(sessionsPayload)
+        ? (sessionsPayload as ActiveSessionAPI[])
+        : Array.isArray((sessionsPayload as ActiveSessionsResponse)?.sessions)
+          ? (sessionsPayload as ActiveSessionsResponse).sessions
+          : [];
+      if (sessionsRes.status === "rejected") {
+        errors.push(
+          formatApiError(sessionsRes.reason, "Active sessions request failed"),
+        );
+      }
+
       setActiveOrders(ordersList);
       setServiceCalls(serviceCallsList);
       setTodaySales(salesTotal);
+      setActiveSessionTableNumbers(
+        new Set(
+          sessionsList
+            .map((s) => Number(s?.table_number))
+            .filter((n) => Number.isFinite(n) && n > 0),
+        ),
+      );
 
       const kitchen = buildKitchenActivities(ordersList);
       const service = buildServiceActivities(serviceCallsList);
@@ -953,7 +1006,7 @@ export default function CustomizeTables() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: WaiterColors.background }}
+      style={{ flex: 1, backgroundColor: "#F8FAFB" }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.container}
       refreshControl={
@@ -964,6 +1017,43 @@ export default function CustomizeTables() {
         />
       }
     >
+      <WaiterWavyHeader title="Floor Overview" height={140}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            width: "100%",
+          }}
+        >
+          <View>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "900",
+                color: "#fff",
+                letterSpacing: -0.5,
+              }}
+            >
+              Floor Overview
+            </Text>
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ fontSize: 16, fontWeight: "800", color: "#fff" }}>
+              {formatRupees(todaySales)}
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: "rgba(255,255,255,0.85)",
+                fontWeight: "600",
+              }}
+            >
+              {occupiedCount} / {totalTables} tables
+            </Text>
+          </View>
+        </View>
+      </WaiterWavyHeader>
       {loading && (
         <View style={{ padding: 16 }}>
           <WaiterText>Loading tables...</WaiterText>
@@ -974,17 +1064,6 @@ export default function CustomizeTables() {
           <WaiterText style={{ color: "red" }}>{error}</WaiterText>
         </View>
       )}
-      <View style={styles.headerRow}>
-        <WaiterText type="title">Floor Overview</WaiterText>
-        <View style={styles.headerRight}>
-          <WaiterText type="defaultSemiBold">
-            {formatRupees(todaySales)}
-          </WaiterText>
-          <WaiterText>
-            {occupiedCount} / {totalTables}
-          </WaiterText>
-        </View>
-      </View>
 
       <View style={styles.metricsRow}>
         <View style={styles.metricCard}>
@@ -1114,7 +1193,9 @@ export default function CustomizeTables() {
           >
             <TouchableOpacity
               style={styles.optionsBtn}
-              onPress={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+              onPress={() =>
+                setOpenMenuId(openMenuId === item.id ? null : item.id)
+              }
             >
               <Text style={{ fontSize: 18 }}>...</Text>
             </TouchableOpacity>
@@ -1213,7 +1294,9 @@ export default function CustomizeTables() {
               </View>
             ) : null}
             <View>
-              <WaiterText type="title">Table {item.number || item.id}</WaiterText>
+              <WaiterText type="title">
+                Table {item.number || item.id}
+              </WaiterText>
               {item.mergedWith && item.mergedWith.length > 0 ? (
                 <View style={styles.mergedBadge}>
                   <Text style={styles.mergedBadgeText}>
@@ -1227,7 +1310,7 @@ export default function CustomizeTables() {
                   fontWeight: "bold",
                 }}
               >
-                {item.isActive ? "Active" : "Available"}
+                {item.isActive ? "Seated" : "Available"}
               </WaiterText>
               <View style={styles.tableMetaRow}>
                 <IconSymbol
@@ -1744,9 +1827,9 @@ export default function CustomizeTables() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 12,
+    paddingHorizontal: 12,
     paddingBottom: 32,
-    backgroundColor: WaiterColors.background,
+    backgroundColor: "#F8FAFB",
   },
   headerRow: {
     flexDirection: "row",
@@ -1759,14 +1842,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 12,
+    marginTop: 10,
   },
   metricCard: {
     flex: 1,
     marginRight: 8,
     padding: 12,
-    borderRadius: 10,
-    backgroundColor: WaiterColors.card,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   metricIcon: {
     width: 40,
@@ -1784,41 +1873,54 @@ const styles = StyleSheet.create({
   filtersRow: { flexDirection: "row", marginBottom: 8 },
   filterBtn: {
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 20,
     marginRight: 8,
-    backgroundColor: WaiterColors.secondary,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  filterActive: { backgroundColor: WaiterColors.primary },
-  filterText: { color: WaiterColors.text },
-  filterTextActive: { color: WaiterColors.card, fontWeight: "700" },
+  filterActive: {
+    backgroundColor: WaiterColors.primary,
+    borderColor: WaiterColors.primary,
+  },
+  filterText: { color: "#64748B", fontWeight: "600" },
+  filterTextActive: { color: "#FFFFFF", fontWeight: "700" },
   searchInput: {
     padding: 10,
-    borderRadius: 10,
-    backgroundColor: WaiterColors.card,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   tableCard: {
     width: "48%",
-    padding: 12,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: 14,
     backgroundColor: "#fff",
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#eee",
     position: "relative",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   tableFree: {
     backgroundColor: "#fff",
-    borderColor: "#e5e7eb",
   },
   tableBill: {
-    borderColor: "#C7E9FF",
+    borderLeftWidth: 3,
+    borderLeftColor: "#38BDF8",
     backgroundColor: "#F0FAFF",
   },
   tableLong: {
-    borderColor: "#FECACA",
+    borderLeftWidth: 3,
+    borderLeftColor: "#F87171",
     backgroundColor: "#FFF5F5",
   },
 
@@ -1843,10 +1945,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: WaiterColors.card,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
     marginTop: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   activityLeft: { flexDirection: "row", alignItems: "center" },
   tableBadge: {
@@ -1884,14 +1991,14 @@ const styles = StyleSheet.create({
     top: 40,
     right: 8,
     width: 160,
-    backgroundColor: WaiterColors.card,
-    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
     paddingVertical: 6,
     zIndex: 30,
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
   },
   optionsItem: {
     paddingVertical: 10,
@@ -1916,14 +2023,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: WaiterColors.card,
+    backgroundColor: "#FFFFFF",
     marginLeft: 8,
   },
   sortMenu: {
     position: "absolute",
     top: 44,
     right: 0,
-    backgroundColor: WaiterColors.card,
+    backgroundColor: "#FFFFFF",
     borderRadius: 8,
     paddingVertical: 6,
     width: 160,
@@ -1949,9 +2056,9 @@ const styles = StyleSheet.create({
   modalContent: {
     width: "100%",
     maxHeight: "80%",
-    backgroundColor: WaiterColors.card,
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
   },
   modalHeader: {
     flexDirection: "row",
@@ -1963,9 +2070,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: WaiterColors.background,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: "#F8FAFB",
     marginBottom: 8,
   },
   emptyMoveState: {
@@ -1996,12 +2103,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 20,
-    backgroundColor: WaiterColors.background,
+    backgroundColor: "#F1F5F9",
     marginRight: 8,
   },
-  activityTabActive: { backgroundColor: WaiterColors.card },
+  activityTabActive: { backgroundColor: "#FFFFFF" },
   activityTabText: { color: "#6B7280", marginRight: 8 },
   activityTabTextActive: {
     color: "#111827",
@@ -2061,4 +2168,3 @@ const styles = StyleSheet.create({
     color: "#4338CA",
   },
 });
-

@@ -2,13 +2,7 @@ import { MaterialIcons as MaterialIcons_ } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -30,6 +24,7 @@ import iconPng from "../../assets/images/icon.png";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
 import { AdminColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
+import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 const MaterialIcons = MaterialIcons_ as any;
 
@@ -137,6 +132,8 @@ export default function Inventory() {
   const [refreshing, setRefreshing] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [deletingItem, setDeletingItem] = useState(false);
   const [uploadingModel, setUploadingModel] = useState(false);
   const [logoUrl, setLogoUrl] = useState("");
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
@@ -152,12 +149,6 @@ export default function Inventory() {
   const [newSubName, setNewSubName] = useState("");
   const [newSubParentId, setNewSubParentId] = useState("");
   const [creatingSub, setCreatingSub] = useState(false);
-  const tabsRef = useRef<ScrollView>(null);
-  const scrollTabsToStart = useCallback(() => {
-    requestAnimationFrame(() => {
-      tabsRef.current?.scrollTo({ x: 0, animated: true });
-    });
-  }, []);
 
   // ── Derived ──────────────────────────────────────────────────────
   const parentCategories = useMemo(
@@ -226,7 +217,10 @@ export default function Inventory() {
                 `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
               );
               const data = await res.json();
-              if (data?.logo_url) setLogoUrl(data.logo_url);
+              if (data?.logo_url) {
+                const version = await getStoredLogoVersion();
+                setLogoUrl(withLogoVersion(data.logo_url, version) || "");
+              }
             } catch {}
           }
         }
@@ -327,12 +321,6 @@ export default function Inventory() {
     await Promise.all([refreshMenu(true), refreshCategories()]);
     setRefreshing(false);
   }, [refreshMenu, refreshCategories]);
-
-  useEffect(() => {
-    if (activeCategory === "all") {
-      scrollTabsToStart();
-    }
-  }, [activeCategory, scrollTabsToStart]);
 
   // ── Selection ───────────────────────────────────────────────────
   const toggleSelect = (id: string) => {
@@ -582,6 +570,87 @@ export default function Inventory() {
     }
   };
 
+  const handleDeleteItem = async () => {
+    if (!editingItem?.id || modalMode !== "edit") return;
+
+    Alert.alert("Delete Item", `Delete "${editingItem.name}" permanently?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setDeletingItem(true);
+            await api.del(`/api/admin/menu/item?item_id=${editingItem.id}`);
+            setModalMode(null);
+            setEditingItem(null);
+            Alert.alert("Deleted", "Item removed successfully");
+            await refreshMenu(true);
+          } catch (e: any) {
+            Alert.alert("Error", e?.message || "Failed to delete item");
+          } finally {
+            setDeletingItem(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const pickAndUploadImage = useCallback(async () => {
+    if (!editingItem) return;
+    if (!editingItem.id) {
+      Alert.alert(
+        "Save First",
+        "Please save this product first, then upload an image.",
+      );
+      return;
+    }
+
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["image/*"],
+      multiple: false,
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.length) return;
+
+    const asset = result.assets[0];
+    const contentType = asset.mimeType || "image/jpeg";
+
+    setUploadingImage(true);
+    try {
+      const ct = encodeURIComponent(contentType);
+      const uploadRes: any = await api.post(
+        `/api/admin/menu/item/image/upload-url?item_id=${editingItem.id}&content_type=${ct}`,
+        {},
+      );
+
+      const uploadURL = uploadRes?.upload_url;
+      const publicURL = uploadRes?.public_url;
+      if (!uploadURL || !publicURL) {
+        throw new Error("Upload URL was not returned");
+      }
+
+      const fileResponse = await fetch(asset.uri);
+      const fileBlob = await fileResponse.blob();
+
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: fileBlob,
+      });
+      if (!putRes.ok) throw new Error("Image upload failed");
+
+      setEditingItem((prev) =>
+        prev ? { ...prev, imageUrl: publicURL } : prev,
+      );
+      Alert.alert("Success", "Image uploaded");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+    }
+  }, [editingItem]);
+
   const pickAndUploadModel = useCallback(async () => {
     if (!editingItem) return;
     if (!editingItem.id) {
@@ -668,7 +737,7 @@ export default function Inventory() {
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.profileAvatar}
-            onPress={() => router.push("/admin/profile")}
+            onPress={() => router.replace("/admin/profile")}
             activeOpacity={0.8}
           >
             {logoUrl ? (
@@ -762,37 +831,6 @@ export default function Inventory() {
       </View>
 
       {/* ── CATEGORY TABS ── */}
-      <ScrollView
-        ref={tabsRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsScroll}
-        contentContainerStyle={styles.tabsContainer}
-        onContentSizeChange={() => {
-          if (activeCategory === "all") scrollTabsToStart();
-        }}
-      >
-        {categoryTabs.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[styles.tab, activeCategory === cat && styles.tabActive]}
-            onPress={() => {
-              setActiveCategory(cat);
-              if (cat === "all") scrollTabsToStart();
-            }}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeCategory === cat && styles.tabTextActive,
-              ]}
-            >
-              {cat === "all" ? "All" : cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       {/* ── BULK BANNER ── */}
       {selectedCount > 0 && (
         <View
@@ -959,7 +997,6 @@ export default function Inventory() {
                 onPress={() => {
                   setActiveCategory(cat);
                   setShowCategoryMenu(false);
-                  if (cat === "all") scrollTabsToStart();
                 }}
               >
                 <Text
@@ -1019,6 +1056,7 @@ export default function Inventory() {
             {/* Modal Body */}
             <ScrollView
               style={styles.modalBody}
+              showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
               {editingItem && (
@@ -1326,19 +1364,36 @@ export default function Inventory() {
                         }
                         autoCapitalize="none"
                       />
-                      {editingItem.imageUrl ? (
-                        <Image
-                          source={{ uri: editingItem.imageUrl }}
-                          style={styles.previewImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.previewPlaceholder}>
-                          <Text style={styles.previewPlaceholderText}>
-                            No image
-                          </Text>
-                        </View>
-                      )}
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={pickAndUploadImage}
+                        disabled={uploadingImage}
+                      >
+                        {editingItem.imageUrl ? (
+                          <Image
+                            source={{ uri: editingItem.imageUrl }}
+                            style={styles.previewImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.previewPlaceholder}>
+                            {uploadingImage ? (
+                              <ActivityIndicator size="small" color="#92400E" />
+                            ) : (
+                              <Text style={styles.previewPlaceholderText}>
+                                Tap to add image
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                      <Text style={styles.imageUploadHint}>
+                        {editingItem.id
+                          ? uploadingImage
+                            ? "Uploading image..."
+                            : "Tap preview area to upload from device"
+                          : "Save product first to enable image upload"}
+                      </Text>
                       <Text style={[styles.fieldLabel, { marginTop: 16 }]}>
                         3D Asset (.glb/.usdz)
                       </Text>
@@ -1622,35 +1677,77 @@ export default function Inventory() {
                   )}
                 </>
               )}
-            </ScrollView>
-
-            {/* Modal Actions */}
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalBtn}
-                onPress={() => {
-                  setModalMode(null);
-                  setEditingItem(null);
-                }}
-              >
-                <Text style={styles.modalBtnText}>Discard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text
-                    style={[styles.modalBtnText, styles.modalBtnTextPrimary]}
+              {/* Modal Actions */}
+              <View style={styles.modalActions}>
+                <View style={styles.modalActionsSecondaryRow}>
+                  {modalMode === "edit" && editingItem?.id ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.modalBtn,
+                        styles.modalBtnDanger,
+                        (saving || deletingItem) && styles.modalBtnDisabled,
+                      ]}
+                      onPress={handleDeleteItem}
+                      disabled={saving || deletingItem}
+                    >
+                      {deletingItem ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.modalBtnText,
+                            styles.modalBtnTextDanger,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          Delete
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[
+                      styles.modalBtn,
+                      styles.modalBtnSecondary,
+                      !(modalMode === "edit" && editingItem?.id) &&
+                        styles.modalBtnGrow,
+                      (saving || deletingItem) && styles.modalBtnDisabled,
+                    ]}
+                    onPress={() => {
+                      setModalMode(null);
+                      setEditingItem(null);
+                    }}
+                    disabled={saving || deletingItem}
                   >
-                    Save Changes
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
+                    <Text style={styles.modalBtnText} numberOfLines={1}>
+                      Discard
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalBtn,
+                    styles.modalBtnPrimary,
+                    styles.modalBtnFullWidth,
+                    (saving || deletingItem) && styles.modalBtnDisabled,
+                  ]}
+                  onPress={handleSave}
+                  disabled={saving || deletingItem}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text
+                      style={[styles.modalBtnText, styles.modalBtnTextPrimary]}
+                      numberOfLines={1}
+                    >
+                      Save Changes
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1746,42 +1843,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     marginBottom: 10,
   },
   profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#FFF",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+    overflow: "hidden",
   },
   profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: "#FEF3C7",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   headerCenter: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
     justifyContent: "center",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
-    letterSpacing: -0.5,
+    fontWeight: "900",
+    color: "#000",
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: "#4B5563",
+    color: "rgba(0,0,0,0.55)",
     fontWeight: "600",
     marginTop: 2,
   },
@@ -1853,43 +1949,6 @@ const styles = StyleSheet.create({
     color: "#4B5563",
     fontWeight: "600",
     fontSize: 13,
-  },
-
-  /* ── CATEGORY TABS ── */
-  tabsScroll: { maxHeight: 50 },
-  tabsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-  },
-  tab: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 4,
-  },
-  tabActive: {
-    backgroundColor: "#111827",
-    borderColor: "#111827",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  tabText: {
-    color: "#4B5563",
-    fontWeight: "600",
-    fontSize: 13,
-    textTransform: "capitalize",
-  },
-  tabTextActive: {
-    color: "#FFF",
-    fontWeight: "700",
   },
 
   /* ── BULK BANNER ── */
@@ -2226,16 +2285,27 @@ const styles = StyleSheet.create({
     color: "#92400E",
   },
   modalActions: {
+    gap: 8,
+    marginTop: 14,
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  modalActionsSecondaryRow: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 20,
+    gap: 8,
   },
   modalBtn: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    minHeight: 42,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBtnSecondary: {
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   modalBtnPrimary: {
     backgroundColor: "#F59E0B",
@@ -2244,12 +2314,32 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  modalBtnDanger: {
+    backgroundColor: "#DC2626",
+    shadowColor: "#DC2626",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalBtnGrow: {
+    flex: 1,
+  },
+  modalBtnFullWidth: {
+    width: "100%",
+    flex: 0,
+  },
+  modalBtnDisabled: {
+    opacity: 0.65,
+  },
   modalBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     color: "#4B5563",
   },
   modalBtnTextPrimary: {
+    color: "#FFF",
+  },
+  modalBtnTextDanger: {
     color: "#FFF",
   },
   modalBody: { paddingVertical: 8 },
@@ -2336,12 +2426,14 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontWeight: "800", color: "#111827" },
   addVariantBtn: {
-    backgroundColor: "#eef2ff",
+    backgroundColor: "#FFFBEB",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
   },
-  addVariantBtnText: { color: "#4f46e5", fontWeight: "700", fontSize: 12 },
+  addVariantBtnText: { color: "#92400E", fontWeight: "700", fontSize: 12 },
   emptyHint: {
     color: "#9ca3af",
     textAlign: "center",
@@ -2390,6 +2482,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   previewPlaceholderText: { color: "#d1d5db", fontWeight: "600" },
+  imageUploadHint: {
+    marginTop: 8,
+    color: "#6b7280",
+    fontSize: 11,
+    fontWeight: "600",
+  },
   modelUploadCard: {
     marginTop: 10,
     minHeight: 120,
@@ -2447,11 +2545,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   dayBtnActive: {
-    backgroundColor: AdminColors.primary,
-    borderColor: AdminColors.primary,
+    backgroundColor: "#F59E0B",
+    borderColor: "#F59E0B",
   },
   dayText: { fontSize: 10, fontWeight: "800", color: "#d1d5db" },
-  dayTextActive: { fontSize: 10, fontWeight: "800", color: "#fff" },
+  dayTextActive: { fontSize: 10, fontWeight: "800", color: "#111827" },
   archiveActionBtn: {
     backgroundColor: "#f3f4f6",
     paddingHorizontal: 14,

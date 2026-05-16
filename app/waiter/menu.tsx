@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
+import WaiterWavyHeader from "../../components/WaiterWavyHeader";
 
 type MenuItem = {
   id: string;
@@ -35,20 +36,22 @@ type CategoryOption = {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: WaiterColors.background },
-  header: { padding: 16, paddingBottom: 6 },
-  title: { fontSize: 22, fontWeight: "800", color: WaiterColors.text },
-  subtitle: { color: "#475569", marginTop: 4 },
-  searchRow: { paddingHorizontal: 16, paddingBottom: 10 },
+  container: { flex: 1, backgroundColor: "#F8FAFB" },
+  searchRow: { paddingHorizontal: 16, paddingVertical: 10 },
   searchInput: {
-    backgroundColor: "#E2F5F2",
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    fontSize: 16,
+    fontSize: 15,
     color: WaiterColors.text,
     borderWidth: 1,
-    borderColor: "#C7F1EB",
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   tabsScroll: { maxHeight: 48 },
   tabsContainer: {
@@ -60,25 +63,36 @@ const styles = StyleSheet.create({
   },
   tab: {
     paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  tabActive: { backgroundColor: WaiterColors.primary, borderColor: WaiterColors.primary },
-  tabText: { color: "#64748B", fontWeight: "600", textTransform: "capitalize" },
-  tabTextActive: { color: "#FFFFFF", fontWeight: "700" },
+  tabActive: {
+    backgroundColor: WaiterColors.primary,
+    borderColor: WaiterColors.primary,
+  },
+  tabText: {
+    color: "#64748B",
+    fontWeight: "600",
+    textTransform: "capitalize",
+    fontSize: 13,
+  },
+  tabTextActive: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
   listContent: { paddingHorizontal: 16, paddingBottom: 16 },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    backgroundColor: WaiterColors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    padding: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
     marginBottom: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   imageBox: {
     width: 56,
@@ -226,10 +240,11 @@ export default function WaiterMenu() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Menu</Text>
-        <Text style={styles.subtitle}>Available items only</Text>
-      </View>
+      <WaiterWavyHeader
+        title="Menu"
+        subtitle="Available items only"
+        height={140}
+      />
 
       <View style={styles.searchRow}>
         <TextInput
@@ -321,7 +336,9 @@ export default function WaiterMenu() {
                   <Text style={styles.categoryText}>
                     {resolveParentName(item)}
                   </Text>
-                  <Text style={styles.price}>Rs {item.price.toLocaleString()}</Text>
+                  <Text style={styles.price}>
+                    Rs {item.price.toLocaleString()}
+                  </Text>
                 </View>
               </View>
             </View>

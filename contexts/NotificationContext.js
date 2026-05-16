@@ -1,11 +1,12 @@
 import React, { createContext, useEffect, useState } from "react";
-import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
 export const NotificationContext = createContext();
 
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
+  const [notificationsApi, setNotificationsApi] = useState(null);
 
   useEffect(() => {
     // Load saved notifications from AsyncStorage on mount
@@ -18,15 +19,28 @@ export const NotificationProvider = ({ children }) => {
       }
     })();
 
+    if (Constants.appOwnership !== "expo") {
+      try {
+        const Notifications = require("expo-notifications");
+        setNotificationsApi(Notifications);
+      } catch {
+        setNotificationsApi(null);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!notificationsApi) return;
+
     // Handle notification taps (if you want to navigate on tap later)
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+    const responseListener = notificationsApi.addNotificationResponseReceivedListener(response => {
       // console.log("Notification tapped:", response);
     });
 
     return () => {
       responseListener.remove();
     };
-  }, []);
+  }, [notificationsApi]);
 
   // Persist notifications whenever they change
   useEffect(() => {
@@ -47,10 +61,12 @@ export const NotificationProvider = ({ children }) => {
 
     // show device local notification
     try {
-      await Notifications.scheduleNotificationAsync({
+      if (notificationsApi) {
+        await notificationsApi.scheduleNotificationAsync({
         content: { title, body, data, sound: "default" },
         trigger: null, // fire immediately
       });
+      }
     } catch (e) {
       console.warn("Failed to show local notification", e);
     }

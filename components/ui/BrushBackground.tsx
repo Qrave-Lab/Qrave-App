@@ -1,8 +1,6 @@
 import React from "react";
-import { View, StyleSheet, Dimensions } from "react-native";
+import { View, StyleSheet, useWindowDimensions } from "react-native";
 import Svg, { Path } from "react-native-svg";
-
-const { width, height } = Dimensions.get("window");
 
 type WaveBackgroundProps = {
   waveColor?: string;
@@ -16,6 +14,7 @@ export const BrushBackground: React.FC<WaveBackgroundProps> = ({
   waveColor = "#FFFFFF",
   backgroundColor = "#FFC220",
 }) => {
+  const { width, height } = useWindowDimensions();
   const waveStartY = height * 0.55;
 
   return (

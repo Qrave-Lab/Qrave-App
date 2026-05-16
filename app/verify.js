@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
 
 const { width, height } = Dimensions.get("window");
@@ -82,6 +83,37 @@ export default function VerifyScreen() {
         const body = await res.text();
         throw new Error(body || "Invalid code");
       }
+
+      const pendingSignupRaw = await AsyncStorage.getItem("pending_signup");
+      if (pendingSignupRaw) {
+        const pendingSignup = JSON.parse(pendingSignupRaw);
+        if (pendingSignup?.email && pendingSignup?.password) {
+          const signupRes = await fetch(`${BASE_URL}/auth/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(pendingSignup),
+          });
+
+          if (!signupRes.ok) {
+            const signupBody = await signupRes.text().catch(() => "");
+            throw new Error(signupBody || "Signup failed");
+          }
+
+          const signupData = await signupRes.json().catch(() => ({}));
+          const accessToken = signupData.access_token || signupData.accessToken;
+          const refreshToken = signupData.refresh_token || signupData.refreshToken;
+
+          if (accessToken) {
+            await AsyncStorage.setItem("qrave_jwt", accessToken);
+          }
+          if (refreshToken) {
+            await AsyncStorage.setItem("qrave_refresh", refreshToken);
+          }
+        }
+
+        await AsyncStorage.removeItem("pending_signup");
+      }
+
       router.push("/setup");
     } catch (err) {
       setError(err?.message || "Verification failed");

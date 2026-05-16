@@ -8,8 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://cayuodxdixjitajvstlz.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_2hRF-C5PioVPbWIvgvQ8OQ_xXKr2O38",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "573285599204-c6un4o0a7tdvjd7crn9iu2vd38r2805s.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "573285599204-ijtq79bnl7t5975s6dftglb9ahemrji7.apps.googleusercontent.com",
@@ -22,8 +21,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://cayuodxdixjitajvstlz.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_2hRF-C5PioVPbWIvgvQ8OQ_xXKr2O38",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "573285599204-c6un4o0a7tdvjd7crn9iu2vd38r2805s.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "573285599204-ijtq79bnl7t5975s6dftglb9ahemrji7.apps.googleusercontent.com",
@@ -36,8 +34,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://cayuodxdixjitajvstlz.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_2hRF-C5PioVPbWIvgvQ8OQ_xXKr2O38",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "573285599204-c6un4o0a7tdvjd7crn9iu2vd38r2805s.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "573285599204-ijtq79bnl7t5975s6dftglb9ahemrji7.apps.googleusercontent.com",

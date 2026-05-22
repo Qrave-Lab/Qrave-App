@@ -311,17 +311,22 @@ export default function SetupScreen() {
         parsedUser = nextUser;
       }
 
+      const supabase = await getSupabaseClient();
+      const { data: existingSession } = supabase
+        ? await supabase.auth.getSession()
+        : { data: null };
+
       if (parsedUser?.email && parsedUser?.id) {
         const backendSession = await syncBackendSessionForGoogleUser(parsedUser, {
           ensureSignup: true,
           restaurantName: brandName?.trim(),
+          supabaseAccessToken: existingSession?.session?.access_token,
         });
         if (!backendSession.ok) {
           throw new Error(backendSession.message || "Failed to link backend account");
         }
       }
 
-      const supabase = await getSupabaseClient();
       if (supabase) {
         await supabase.auth.updateUser({
           data: {

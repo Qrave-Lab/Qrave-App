@@ -29,12 +29,21 @@ type BillingStatus = {
   is_access_allowed?: boolean;
   access_reason?: string;
   days_left?: number;
+  pending_plan?: string;
+  pending_plan_starts_at?: string | null;
 };
 
 const PLAN_OPTIONS = [
   { id: "monthly_499", label: "Monthly", amount: "Rs 499" },
   { id: "yearly_5500", label: "Yearly", amount: "Rs 5,500" },
 ];
+
+const planLabel = (plan?: string | null) => {
+  const value = String(plan || "").toLowerCase();
+  if (value === "yearly_5500") return "Yearly Rs 5,500";
+  if (value === "monthly_499") return "Monthly Rs 499";
+  return value ? value.replace(/_/g, " ").toUpperCase() : "Monthly Rs 499";
+};
 
 const formatDate = (value?: string | null) => {
   if (!value) return "-";
@@ -137,6 +146,14 @@ export default function SubscriptionScreen() {
     );
   }, [billing]);
 
+  const isChangeable = useMemo(() => {
+    const raw = String(billing?.status || "").toLowerCase();
+    const hasPaidCycle =
+      Boolean(billing?.last_payment_at) || Boolean(billing?.current_period_end);
+    const normalized = raw === "trialing" && hasPaidCycle ? "active" : raw;
+    return normalized === "active" || normalized === "trialing";
+  }, [billing]);
+
   const startPayment = useCallback(
     async (mode: "subscribe" | "reactivate") => {
       const label = mode === "reactivate" ? "reactivate" : "subscribe";
@@ -165,6 +182,39 @@ export default function SubscriptionScreen() {
     },
     [selectedPlan],
   );
+
+  const changePlan = useCallback(async () => {
+    if (role !== "owner") {
+      setError("Only owner can change subscription plans.");
+      return;
+    }
+    if (selectedPlan === billing?.plan) {
+      setError("Select a different plan to schedule a change.");
+      return;
+    }
+
+    setBusyAction("change-plan");
+    setNotice("");
+    try {
+      const res: any = await apiClient.patch("/api/admin/billing/plan", {
+        plan: selectedPlan,
+      });
+      const url = String(res?.short_url || "").trim();
+      if (url) {
+        await Linking.openURL(url);
+        setSuccess(
+          "Plan change page opened. Authorize it there; billing starts after your current plan ends.",
+        );
+      } else {
+        setSuccess("Plan change scheduled after your current plan ends.");
+      }
+      await loadData(true);
+    } catch (err: any) {
+      setError(asMessage(err, "Failed to schedule plan change."));
+    } finally {
+      setBusyAction("");
+    }
+  }, [billing?.plan, loadData, role, selectedPlan]);
 
   const syncStatus = useCallback(async () => {
     setBusyAction("sync");
@@ -226,12 +276,7 @@ export default function SubscriptionScreen() {
   }, [loadData]);
 
   const currentPlanText = useMemo(() => {
-    const plan = String(
-      billing?.plan || selectedPlan || "monthly_499",
-    ).toLowerCase();
-    if (plan === "yearly_5500") return "Yearly \u20B95,500";
-    if (plan === "monthly_499") return "Monthly \u20B9499";
-    return plan.replace(/_/g, " ").toUpperCase();
+    return planLabel(billing?.plan || selectedPlan || "monthly_499");
   }, [billing?.plan, selectedPlan]);
 
   const statusHeadline = useMemo(() => {
@@ -323,8 +368,9 @@ export default function SubscriptionScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.billingLabel}>Manage Billing</Text>
                 <Text style={styles.billingHint}>
-                  Cancel anytime. If payment fails without cancellation, a 3-day
-                  grace period is applied.
+                  {isInactive
+                    ? "Choose a plan and authorize autopay to unlock all features again."
+                    : "Change plans anytime. The new plan starts after your current paid period ends."}
                 </Text>
               </View>
               <Pressable
@@ -344,6 +390,21 @@ export default function SubscriptionScreen() {
                 )}
               </Pressable>
             </View>
+
+            {billing?.pending_plan ? (
+              <View style={styles.pendingBox}>
+                <Text style={styles.pendingTitle}>Plan change scheduled</Text>
+                <Text style={styles.pendingText}>
+                  {planLabel(billing.pending_plan)} starts on{" "}
+                  {formatDate(
+                    billing.pending_plan_starts_at ||
+                      billing.current_period_end ||
+                      billing.trial_ends_at,
+                  )}
+                  . No charge is taken before then.
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.planRow}>
               {PLAN_OPTIONS.map((plan) => {
@@ -373,17 +434,32 @@ export default function SubscriptionScreen() {
               <Pressable
                 style={[styles.manageBtn, isNarrow && styles.fullWidthBtn]}
                 onPress={() =>
-                  startPayment(isInactive ? "reactivate" : "subscribe")
+                  isInactive ? startPayment("reactivate") : changePlan()
                 }
                 disabled={
-                  busyAction === "subscribe" || busyAction === "reactivate"
+                  Boolean(billing?.pending_plan) ||
+                  (!isInactive && selectedPlan === billing?.plan) ||
+                  (!isInactive && !isChangeable) ||
+                  busyAction === "subscribe" ||
+                  busyAction === "reactivate" ||
+                  busyAction === "change-plan"
                 }
               >
-                {busyAction === "subscribe" || busyAction === "reactivate" ? (
+                {busyAction === "subscribe" ||
+                busyAction === "reactivate" ||
+                busyAction === "change-plan" ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.manageBtnText}>
-                    {isInactive ? "Reactivate Subscription" : "Manage Billing"}
+                    {billing?.pending_plan
+                      ? "Plan Change Scheduled"
+                      : isInactive
+                        ? "Reactivate Subscription"
+                        : `Change to ${
+                            selectedPlan === "monthly_499"
+                              ? "Monthly"
+                              : "Yearly"
+                          }`}
                   </Text>
                 )}
               </Pressable>
@@ -554,6 +630,29 @@ const styles = StyleSheet.create({
     color: "#DC2626",
     fontSize: 14,
     fontWeight: "800",
+  },
+  pendingBox: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    backgroundColor: "#ECFDF5",
+    padding: 12,
+  },
+  pendingTitle: {
+    color: "#047857",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  pendingText: {
+    color: "#047857",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
   },
   planRow: {
     paddingHorizontal: 12,

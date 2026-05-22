@@ -32,7 +32,7 @@ import {
     persistAuthFromResponse,
 } from "../lib/apiClient";
 import { syncBackendSessionForGoogleUser } from "../lib/googleBackendBridge";
-import { supabase } from "../lib/supabaseClient";
+import { clearSupabasePkceState, supabase } from "../lib/supabaseClient";
 
 const { width, height } = Dimensions.get("window");
 const THEME_COLOR = "#F4B400";
@@ -69,6 +69,14 @@ const parseAuthParamsFromUrl = (url) => {
     error: get("error") || get("error_code"),
     errorDescription: get("error_description"),
   };
+};
+
+const friendlyGoogleAuthError = (error) => {
+  const message = String(error?.message || error || "");
+  if (/pkce|code verifier|auth code and code verifier/i.test(message)) {
+    return "Google sign-in session expired. Please try again.";
+  }
+  return message || "Could not complete Google sign-in.";
 };
 
 const isGoogleAuthCallbackUrl = (url) => {
@@ -215,6 +223,11 @@ export default function LoginScreen() {
       throw new Error(errorDescription || error);
     }
 
+    if (code && Platform.OS !== "web") {
+      await clearSupabasePkceState();
+      throw new Error("Google sign-in session expired. Please try again.");
+    }
+
     if (code) {
       const exchangeKey = `code:${code}`;
       const cachedAuthResult = oauthExchangeResultsRef.current.get(exchangeKey);
@@ -225,8 +238,13 @@ export default function LoginScreen() {
 
       const exchangePromise = supabase.auth
         .exchangeCodeForSession(code)
-        .then(({ data: sessionData, error: exchangeError }) => {
-          if (exchangeError) throw exchangeError;
+        .then(async ({ data: sessionData, error: exchangeError }) => {
+          if (exchangeError) {
+            if (/pkce|code verifier/i.test(String(exchangeError?.message || ""))) {
+              await clearSupabasePkceState();
+            }
+            throw exchangeError;
+          }
           const user = sessionData?.session?.user;
           if (!user?.email || !user?.id) {
             throw new Error("Could not get user info from Google sign-in.");
@@ -270,7 +288,7 @@ export default function LoginScreen() {
       try {
         const stored = await AsyncStorage.getItem("google_auth_error");
         if (stored) {
-          setError(stored);
+          setError(friendlyGoogleAuthError(stored));
           await AsyncStorage.removeItem("google_auth_error");
         }
       } catch {}
@@ -298,7 +316,11 @@ export default function LoginScreen() {
         }
       } catch (e) {
         console.error("[DeepLink] Google OAuth callback error:", e);
-        setError(e?.message || "Could not complete Google sign-in.");
+        await AsyncStorage.multiRemove([
+          GOOGLE_AUTH_INTENT_KEY,
+          GOOGLE_AUTH_STARTED_AT_KEY,
+        ]);
+        setError(friendlyGoogleAuthError(e));
       }
     };
 
@@ -635,7 +657,7 @@ export default function LoginScreen() {
     } catch (err) {
       handledGoogleUsersRef.current.delete(handledKey);
       console.error("[GoogleAuth] Error:", err);
-      setError(err?.message || "Google auth failed");
+      setError(friendlyGoogleAuthError(err) || "Google auth failed");
     } finally {
       setIsLoading(false);
     }
@@ -650,6 +672,7 @@ export default function LoginScreen() {
     setError("");
     authSessionInProgressRef.current = true;
     try {
+      await clearSupabasePkceState();
       const intent = activeTab === "login" ? "login" : "signup";
       await AsyncStorage.multiSet([
         [GOOGLE_AUTH_INTENT_KEY, intent],
@@ -746,7 +769,7 @@ export default function LoginScreen() {
         GOOGLE_AUTH_STARTED_AT_KEY,
       ]);
       console.error("[GoogleAuth] Supabase OAuth error:", err);
-      setError(err?.message || "Could not start Google sign-in");
+      setError(friendlyGoogleAuthError(err) || "Could not start Google sign-in");
     } finally {
       authSessionInProgressRef.current = false;
       setIsLoading(false);

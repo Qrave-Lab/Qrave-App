@@ -1,14 +1,13 @@
-import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import AdminSettingsHeader from "../../components/AdminSettingsHeader";
 import apiClient from "../../lib/apiClient";
@@ -32,10 +31,30 @@ const FEATURES: { key: FeatureKey; label: string }[] = [
 ];
 
 const defaultRoleAccess = (): RoleAccess => ({
-  manager: { floor: true, menu: true, analytics: true, settings: true },
-  kitchen: { floor: true, menu: false, analytics: false, settings: false },
-  waiter: { floor: true, menu: false, analytics: false, settings: false },
-  cashier: { floor: true, menu: false, analytics: true, settings: false },
+  manager: {
+    floor: true,
+    menu: true,
+    analytics: true,
+    settings: true,
+  },
+  kitchen: {
+    floor: true,
+    menu: false,
+    analytics: false,
+    settings: false,
+  },
+  waiter: {
+    floor: true,
+    menu: false,
+    analytics: false,
+    settings: false,
+  },
+  cashier: {
+    floor: true,
+    menu: false,
+    analytics: true,
+    settings: false,
+  },
 });
 
 function normalizeRoleAccess(raw: any): RoleAccess {

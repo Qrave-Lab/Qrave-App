@@ -1,26 +1,27 @@
+import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { Tabs, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Tabs, useRouter } from "expo-router";
-import { MaterialIcons } from "@expo/vector-icons";
 import { HapticTab } from "../../components/haptic-tab";
 import { WaiterColors } from "../../constants/theme";
 
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
   "customize-tables": { icon: "table-restaurant", label: "Floor" },
+  waitlist: { icon: "event-seat", label: "Waitlist" },
   menu: { icon: "restaurant-menu", label: "Menu" },
   profile: { icon: "person", label: "Profile" },
 };
 
 function WaiterTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const visibleTabs = ["customize-tables", "menu", "profile"];
+  const visibleTabs = ["customize-tables", "waitlist", "menu", "profile"];
 
   return (
     <View style={styles.tabBarContainer}>
@@ -124,6 +125,7 @@ export default function WaiterTabLayout() {
       >
         <Tabs.Screen name="index" options={{ href: null }} />
         <Tabs.Screen name="customize-tables" options={{ title: "Floor" }} />
+        <Tabs.Screen name="waitlist" options={{ title: "Waitlist" }} />
         <Tabs.Screen name="menu" options={{ title: "Menu" }} />
         <Tabs.Screen name="profile" options={{ title: "Profile" }} />
         <Tabs.Screen name="take-order" options={{ href: null }} />

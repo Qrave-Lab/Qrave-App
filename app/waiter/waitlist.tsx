@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { MaterialIcons } from "@expo/vector-icons";
 import {
     ActivityIndicator,
     Alert,
@@ -13,7 +14,30 @@ import WaiterWavyHeader from "../../components/WaiterWavyHeader";
 import { WaiterColors } from "../../constants/theme";
 import apiClient from "../../lib/apiClient";
 
-const toIsoFromInputs = (date, time) => {
+type TableOption = {
+  id: string;
+  table_number?: number;
+  number?: number;
+  capacity?: number;
+};
+
+type ReservationEntry = {
+  id: string;
+  guest_name: string;
+  party_size: number;
+  reserved_at: string;
+  table_number?: number;
+};
+
+type WaitlistEntry = {
+  id: string;
+  guest_name: string;
+  party_size: number;
+  quoted_minutes?: number;
+  created_at?: string;
+};
+
+const toIsoFromInputs = (date: string, time: string) => {
   const iso = new Date(`${date}T${time}`);
   if (Number.isNaN(iso.getTime())) return null;
   return iso.toISOString();
@@ -24,7 +48,7 @@ const defaultTimeInput = () => {
   const next = new Date(Date.now() + 60 * 60 * 1000);
   return `${String(next.getHours()).padStart(2, "0")}:${String(next.getMinutes()).padStart(2, "0")}`;
 };
-const formatDateTime = (value) => {
+const formatDateTime = (value: string) => {
   try {
     return new Intl.DateTimeFormat("en-IN", {
       dateStyle: "medium",
@@ -34,25 +58,39 @@ const formatDateTime = (value) => {
     return value;
   }
 };
-const waitedMinutes = (value) => {
+const waitedMinutes = (value?: string) => {
+  if (!value) return 0;
   const n = Math.round((Date.now() - new Date(value).getTime()) / 60000);
   return Math.max(0, Number.isFinite(n) ? n : 0);
 };
 
 // Returns true when a table is the tightest fit for a given party size.
-const isBestFit = (table, partySize) => {
+const getTableNumber = (table: TableOption) =>
+  table.table_number || table.number || Number(String(table.id).replace(/\D/g, ""));
+
+const isBestFit = (table: TableOption, partySize: number) => {
   const cap = table.capacity ?? 4;
   return cap >= partySize && cap <= partySize + 2;
 };
 
+const availableTableSummary = (tables: TableOption[], partySize: number) => {
+  const best = tables.filter((table) => isBestFit(table, partySize));
+  const list = (best.length ? best : tables)
+    .slice(0, 8)
+    .map((table) => `T${getTableNumber(table)}`)
+    .join(", ");
+  return list || "Auto-assign available";
+};
+
 export default function WaiterWaitlistScreen() {
-  const [tables, setTables] = useState([]);
-  const [reservations, setReservations] = useState([]);
-  const [waitlist, setWaitlist] = useState([]);
+  const [tables, setTables] = useState<TableOption[]>([]);
+  const [reservations, setReservations] = useState<ReservationEntry[]>([]);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Per-entry auto-session toggle (defaults to true)
-  const [autoSessionMap, setAutoSessionMap] = useState({});
+  const [autoSessionMap, setAutoSessionMap] = useState<Record<string, boolean>>({});
+  const [seatTableMap, setSeatTableMap] = useState<Record<string, string>>({});
 
   const [reservationForm, setReservationForm] = useState({
     name: "",
@@ -79,8 +117,8 @@ export default function WaiterWaitlistScreen() {
     [tables],
   );
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [tablesRes, reservationsRes, waitlistRes] = await Promise.all([
         apiClient.get("/api/admin/tables"),
@@ -93,12 +131,16 @@ export default function WaiterWaitlistScreen() {
     } catch (e) {
       console.warn("Failed to load waitlist data", e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadData();
+    const timer = setInterval(() => {
+      loadData(true).catch(() => undefined);
+    }, 5000);
+    return () => clearInterval(timer);
   }, [loadData]);
 
   const createReservation = async () => {
@@ -163,11 +205,12 @@ export default function WaiterWaitlistScreen() {
     }
   };
 
-  const seatWaitlistEntry = async (entry) => {
+  const seatWaitlistEntry = async (entry: WaitlistEntry) => {
     const autoSession = autoSessionMap[entry.id] !== false; // default true
+    const tableId = seatTableMap[entry.id] || "auto";
     try {
       const res = await apiClient.post(`/api/admin/waitlist/${entry.id}/seat`, {
-        table_id: "auto",
+        table_id: tableId,
         auto_session: autoSession,
       });
       if (res?.session_id) {
@@ -179,7 +222,7 @@ export default function WaiterWaitlistScreen() {
     }
   };
 
-  const bumpWaitlistEntry = async (id) => {
+  const bumpWaitlistEntry = async (id: string) => {
     try {
       await apiClient.post(`/api/admin/waitlist/${id}/bump`, {});
       await loadData();
@@ -188,7 +231,7 @@ export default function WaiterWaitlistScreen() {
     }
   };
 
-  const reorderWaitlist = async (nextQueue) => {
+  const reorderWaitlist = async (nextQueue: WaitlistEntry[]) => {
     setSaving(true);
     try {
       const total = nextQueue.length;
@@ -208,7 +251,7 @@ export default function WaiterWaitlistScreen() {
     }
   };
 
-  const moveWaitlistEntry = (index, direction) => {
+  const moveWaitlistEntry = (index: number, direction: number) => {
     const nextIndex = index + direction;
     if (nextIndex < 0 || nextIndex >= waitlist.length) return;
     const nextQueue = [...waitlist];
@@ -219,7 +262,7 @@ export default function WaiterWaitlistScreen() {
     reorderWaitlist(nextQueue);
   };
 
-  const removeWaitlistEntry = async (id) => {
+  const removeWaitlistEntry = async (id: string) => {
     try {
       await apiClient.patch(`/api/admin/waitlist/${id}`, { status: "removed" });
       await loadData();
@@ -228,7 +271,7 @@ export default function WaiterWaitlistScreen() {
     }
   };
 
-  const updateReservationStatus = async (id, status) => {
+  const updateReservationStatus = async (id: string, status: string) => {
     try {
       await apiClient.patch(`/api/admin/reservations/${id}`, { status });
       await loadData();
@@ -509,6 +552,79 @@ export default function WaiterWaitlistScreen() {
                       Waited {waitedMinutes(entry.created_at)}m / quoted {entry.quoted_minutes}m
                     </Text>
 
+                    <View style={styles.readyWrap}>
+                      <MaterialIcons name="circle" size={8} color="#10B981" />
+                      <Text style={styles.readyText}>
+                        Table ready: {availableTableSummary(tableOptions, partySize)}
+                      </Text>
+                    </View>
+
+                    <View style={styles.seatingBox}>
+                      <Text style={styles.selectionLabel}>
+                        Select seating table
+                      </Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.tableStrip}
+                      >
+                        <TouchableOpacity
+                          style={[
+                            styles.tableChip,
+                            (seatTableMap[entry.id] || "auto") === "auto" &&
+                              styles.tableChipActive,
+                          ]}
+                          onPress={() =>
+                            setSeatTableMap((prev) => ({
+                              ...prev,
+                              [entry.id]: "auto",
+                            }))
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.tableChipText,
+                              (seatTableMap[entry.id] || "auto") === "auto" &&
+                                styles.tableChipTextActive,
+                            ]}
+                          >
+                            Auto-assign
+                          </Text>
+                        </TouchableOpacity>
+                        {tableOptions.map((table) => {
+                          const tableId = String(table.id);
+                          const best = isBestFit(table, partySize);
+                          const isSelected = seatTableMap[entry.id] === tableId;
+                          return (
+                            <TouchableOpacity
+                              key={tableId}
+                              style={[
+                                styles.tableChip,
+                                best && styles.tableChipBestFit,
+                                isSelected && styles.tableChipActive,
+                              ]}
+                              onPress={() =>
+                                setSeatTableMap((prev) => ({
+                                  ...prev,
+                                  [entry.id]: tableId,
+                                }))
+                              }
+                            >
+                              <Text
+                                style={[
+                                  styles.tableChipText,
+                                  best && styles.tableChipTextBestFit,
+                                  isSelected && styles.tableChipTextActive,
+                                ]}
+                              >
+                                T{getTableNumber(table)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+
                     {/* Auto-session toggle */}
                     <TouchableOpacity
                       style={[
@@ -540,10 +656,15 @@ export default function WaiterWaitlistScreen() {
 
                     <View style={styles.row}>
                       <TouchableOpacity
-                        style={styles.secondaryBtn}
+                        style={styles.seatGuestBtn}
                         onPress={() => seatWaitlistEntry(entry)}
                       >
-                        <Text style={styles.secondaryBtnText}>Seat</Text>
+                        <MaterialIcons
+                          name="check-circle-outline"
+                          size={17}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.seatGuestText}>Seat Guest</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -651,10 +772,13 @@ const styles = StyleSheet.create({
   },
   ghostBtnText: { color: "#475569", fontWeight: "700", fontSize: 12 },
   listItem: {
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
-    paddingTop: 10,
-    gap: 6,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    gap: 10,
+    marginTop: 10,
   },
   listRow: {
     flexDirection: "row",
@@ -672,6 +796,35 @@ const styles = StyleSheet.create({
     color: "#475569",
   },
   listMeta: { fontSize: 12, color: "#64748B" },
+  readyWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    gap: 6,
+  },
+  readyText: {
+    flex: 1,
+    color: "#047857",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  seatingBox: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: "#FFFFFF",
+    gap: 8,
+  },
+  selectionLabel: {
+    color: "#64748B",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
   emptyText: { fontSize: 12, color: "#94A3B8" },
   tableStrip: { flexGrow: 0 },
   tableChip: {
@@ -694,6 +847,17 @@ const styles = StyleSheet.create({
   tableChipText: { color: "#64748B", fontWeight: "700", fontSize: 12 },
   tableChipTextActive: { color: "#FFFFFF" },
   tableChipTextBestFit: { color: "#15803D", fontWeight: "800" },
+  seatGuestBtn: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    backgroundColor: WaiterColors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  seatGuestText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",

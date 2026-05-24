@@ -2,19 +2,19 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import iconPng from "../../assets/images/icon.png";
@@ -73,6 +73,17 @@ type TakeawayOrder = {
   items: TakeawayOrderItem[];
 };
 
+type TableOption = {
+  id: string;
+  table_number?: number;
+  number?: number;
+  capacity?: number;
+  is_archived?: boolean;
+  archived?: boolean;
+  is_deleted?: boolean;
+  deleted?: boolean;
+};
+
 /* ── Helpers ───────────────────────────────────────────────── */
 const STATUS_META: Record<string, { label: string; bg: string; text: string }> =
   {
@@ -92,6 +103,20 @@ const NEXT_STATUS: Record<string, string> = {
 const fmtCur = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 
 /* ── Component ─────────────────────────────────────────────── */
+const toIsoFromInputs = (date: string, time: string) => {
+  const iso = new Date(`${date}T${time}`);
+  if (Number.isNaN(iso.getTime())) return null;
+  return iso.toISOString();
+};
+
+const todayInput = () => new Date().toISOString().slice(0, 10);
+const defaultTimeInput = () => {
+  const next = new Date(Date.now() + 60 * 60 * 1000);
+  return `${String(next.getHours()).padStart(2, "0")}:${String(
+    next.getMinutes(),
+  ).padStart(2, "0")}`;
+};
+
 export default function TakeawayTab() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -105,9 +130,13 @@ export default function TakeawayTab() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [orders, setOrders] = useState<TakeawayOrder[]>([]);
+  const [tables, setTables] = useState<TableOption[]>([]);
   const [taxPercent, setTaxPercent] = useState<number>(0);
 
   const [showNewOrder, setShowNewOrder] = useState(false);
+  const [showReservationActions, setShowReservationActions] = useState(false);
+  const [showReservationForm, setShowReservationForm] = useState(false);
+  const [showWalkInForm, setShowWalkInForm] = useState(false);
   const [searchMenu, setSearchMenu] = useState("");
   const [orderType, setOrderType] = useState<"takeout" | "delivery">("takeout");
   const [customerName, setCustomerName] = useState("");
@@ -117,10 +146,45 @@ export default function TakeawayTab() {
   const [paymentMode, setPaymentMode] = useState("cash");
   const [notes, setNotes] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [reservationForm, setReservationForm] = useState({
+    name: "",
+    partySize: "2",
+    date: todayInput(),
+    time: defaultTimeInput(),
+    tableId: "any",
+    phone: "",
+    notes: "",
+  });
+  const [walkInForm, setWalkInForm] = useState({
+    name: "",
+    partySize: "2",
+    phone: "",
+    quotedMins: "20",
+  });
 
   const selectedZone = useMemo(
     () => zones.find((z) => z.id === selectedZoneId) || null,
     [selectedZoneId, zones],
+  );
+
+  const tableOptions = useMemo(
+    () =>
+      tables
+        .filter(
+          (t) =>
+            !(
+              t?.is_archived ||
+              t?.archived ||
+              t?.is_deleted ||
+              t?.deleted
+            ),
+        )
+        .sort(
+          (a, b) =>
+            Number(a.table_number || a.number || 0) -
+            Number(b.table_number || b.number || 0),
+        ),
+    [tables],
   );
 
   const filteredMenu = useMemo(() => {
@@ -160,10 +224,11 @@ export default function TakeawayTab() {
   );
 
   const bootstrap = useCallback(async () => {
-    const [me, menuRes, zonesRes] = await Promise.all([
+    const [me, menuRes, zonesRes, tablesRes] = await Promise.all([
       apiClient.get("/api/admin/me"),
       apiClient.get("/api/admin/menu"),
       apiClient.get("/api/admin/delivery/zones"),
+      apiClient.get("/api/admin/tables"),
     ]);
     setTaxPercent(Number(me?.tax_percent || 0));
     const menuList = Array.isArray(menuRes)
@@ -184,6 +249,7 @@ export default function TakeawayTab() {
         .filter((i: MenuItem) => !i.isArchived && !i.isOutOfStock),
     );
     setZones(Array.isArray(zonesRes?.zones) ? zonesRes.zones : []);
+    setTables(Array.isArray(tablesRes) ? (tablesRes as TableOption[]) : []);
 
     // Logo
     const rId = me?.restaurant_id || me?.id;
@@ -274,6 +340,29 @@ export default function TakeawayTab() {
   }, []);
 
   /* ── Create Order ───────────────────────────────────────── */
+  const resetReservationForm = useCallback(() => {
+    setReservationForm({
+      name: "",
+      partySize: "2",
+      date: todayInput(),
+      time: defaultTimeInput(),
+      tableId: "any",
+      phone: "",
+      notes: "",
+    });
+    setShowReservationForm(false);
+  }, []);
+
+  const resetWalkInForm = useCallback(() => {
+    setWalkInForm({
+      name: "",
+      partySize: "2",
+      phone: "",
+      quotedMins: "20",
+    });
+    setShowWalkInForm(false);
+  }, []);
+
   const createOrder = useCallback(async () => {
     if (cart.length === 0) {
       Alert.alert("Missing items", "Add at least one item.");
@@ -327,6 +416,57 @@ export default function TakeawayTab() {
   ]);
 
   /* ── Status Update ──────────────────────────────────────── */
+  const createReservation = useCallback(async () => {
+    if (!reservationForm.name.trim()) {
+      Alert.alert("Guest required", "Enter a guest name for the reservation.");
+      return;
+    }
+    const iso = toIsoFromInputs(reservationForm.date, reservationForm.time);
+    if (!iso) {
+      Alert.alert("Invalid time", "Use a valid date and time.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiClient.post("/api/admin/reservations", {
+        guest_name: reservationForm.name.trim(),
+        party_size: Math.max(1, Number(reservationForm.partySize) || 1),
+        reserved_at: iso,
+        table_id: reservationForm.tableId || "any",
+        phone: reservationForm.phone.trim() || undefined,
+        notes: reservationForm.notes.trim() || undefined,
+      });
+      resetReservationForm();
+      Alert.alert("Booked", "Reservation added successfully.");
+    } catch {
+      Alert.alert("Create failed", "Could not add reservation.");
+    } finally {
+      setBusy(false);
+    }
+  }, [reservationForm, resetReservationForm]);
+
+  const createWalkIn = useCallback(async () => {
+    if (!walkInForm.name.trim()) {
+      Alert.alert("Guest required", "Enter a guest name for the waitlist.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiClient.post("/api/admin/waitlist", {
+        guest_name: walkInForm.name.trim(),
+        party_size: Math.max(1, Number(walkInForm.partySize) || 1),
+        phone: walkInForm.phone.trim() || undefined,
+        quoted_minutes: Math.max(5, Number(walkInForm.quotedMins) || 5),
+      });
+      resetWalkInForm();
+      Alert.alert("Added", "Walk-in added to waitlist.");
+    } catch {
+      Alert.alert("Create failed", "Could not add walk-in.");
+    } finally {
+      setBusy(false);
+    }
+  }, [resetWalkInForm, walkInForm]);
+
   const updateStatus = useCallback(
     async (orderId: string, newStatus: string) => {
       setUpdatingOrderId(orderId);
@@ -377,13 +517,26 @@ export default function TakeawayTab() {
           <View style={s.headerCenter}>
             <Text style={s.headerTitle}>Orders</Text>
           </View>
-          <Pressable
-            style={s.newOrderBtn}
-            onPress={() => setShowNewOrder(true)}
-          >
-            <MaterialIcons name="add" size={16} color="#FFFFFF" />
-            <Text style={s.newOrderBtnText}>New Order</Text>
-          </Pressable>
+          <View style={s.headerActions}>
+            <Pressable
+              style={s.queueBtn}
+              onPress={() => router.push("/admin/queue")}
+            >
+              <MaterialIcons name="format-list-bulleted" size={24} color="#0F172A" />
+            </Pressable>
+            <Pressable
+              style={s.reservationBtn}
+              onPress={() => setShowReservationActions(true)}
+            >
+              <MaterialIcons name="event-seat" size={22} color="#0F172A" />
+            </Pressable>
+            <Pressable
+              style={s.newOrderBtn}
+              onPress={() => setShowNewOrder(true)}
+            >
+              <MaterialIcons name="add" size={24} color="#0F172A" />
+            </Pressable>
+          </View>
         </View>
       </AdminWavyHeader>
 
@@ -603,6 +756,302 @@ export default function TakeawayTab() {
       </ScrollView>
 
       {/* ── NEW ORDER MODAL ── */}
+      <Modal
+        visible={showReservationActions}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowReservationActions(false)}
+      >
+        <View style={s.choiceOverlay}>
+          <View style={s.choiceCard}>
+            <View style={s.modalHead}>
+              <Text style={s.modalTitle}>Reservations & Waitlist</Text>
+              <Pressable onPress={() => setShowReservationActions(false)}>
+                <MaterialIcons name="close" size={22} color="#64748B" />
+              </Pressable>
+            </View>
+            <Text style={s.choiceSub}>
+              Reserve a table or add walk-in guests to the live queue.
+            </Text>
+            <View style={s.choiceActions}>
+              <Pressable
+                style={s.choiceBtn}
+                onPress={() => {
+                  setShowReservationActions(false);
+                  setShowReservationForm(true);
+                }}
+              >
+                <MaterialIcons
+                  name="event-available"
+                  size={22}
+                  color="#0F172A"
+                />
+                <View style={s.choiceTextWrap}>
+                  <Text style={s.choiceTitle}>Book Reservation</Text>
+                  <Text style={s.choiceHint}>Schedule a table hold</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={22} color="#94A3B8" />
+              </Pressable>
+              <Pressable
+                style={[s.choiceBtn, s.choiceBtnGreen]}
+                onPress={() => {
+                  setShowReservationActions(false);
+                  setShowWalkInForm(true);
+                }}
+              >
+                <MaterialIcons name="group-add" size={22} color="#047857" />
+                <View style={s.choiceTextWrap}>
+                  <Text style={[s.choiceTitle, s.choiceTitleGreen]}>
+                    Add Walk-in
+                  </Text>
+                  <Text style={s.choiceHint}>Place guests on waitlist</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={22} color="#10B981" />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showReservationForm}
+        animationType="slide"
+        transparent
+        onRequestClose={resetReservationForm}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHead}>
+              <Text style={s.modalTitle}>Book Reservation</Text>
+              <Pressable onPress={resetReservationForm}>
+                <MaterialIcons name="close" size={22} color="#64748B" />
+              </Pressable>
+            </View>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              <Text style={s.fieldLabel}>Guest Name</Text>
+              <TextInput
+                style={s.input}
+                value={reservationForm.name}
+                onChangeText={(text) =>
+                  setReservationForm((prev) => ({ ...prev, name: text }))
+                }
+                placeholder="Aanya Sharma"
+                placeholderTextColor="#94A3B8"
+              />
+              <Text style={s.fieldLabel}>Party Size</Text>
+              <TextInput
+                style={s.input}
+                value={reservationForm.partySize}
+                onChangeText={(text) =>
+                  setReservationForm((prev) => ({ ...prev, partySize: text }))
+                }
+                keyboardType="number-pad"
+                placeholder="2"
+                placeholderTextColor="#94A3B8"
+              />
+              <View style={s.formGrid}>
+                <View style={s.formHalf}>
+                  <Text style={s.fieldLabel}>Date</Text>
+                  <TextInput
+                    style={s.input}
+                    value={reservationForm.date}
+                    onChangeText={(text) =>
+                      setReservationForm((prev) => ({ ...prev, date: text }))
+                    }
+                    placeholder="yyyy-mm-dd"
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+                <View style={s.formHalf}>
+                  <Text style={s.fieldLabel}>Time</Text>
+                  <TextInput
+                    style={s.input}
+                    value={reservationForm.time}
+                    onChangeText={(text) =>
+                      setReservationForm((prev) => ({ ...prev, time: text }))
+                    }
+                    placeholder="19:30"
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+              </View>
+              <Text style={s.fieldLabel}>Table Pre-assignment</Text>
+              <View style={s.chipRow}>
+                <Pressable
+                  style={[
+                    s.zoneChip,
+                    reservationForm.tableId === "any" && s.zoneChipActive,
+                  ]}
+                  onPress={() =>
+                    setReservationForm((prev) => ({ ...prev, tableId: "any" }))
+                  }
+                >
+                  <Text
+                    style={[
+                      s.zoneChipText,
+                      reservationForm.tableId === "any" &&
+                        s.zoneChipTextActive,
+                    ]}
+                  >
+                    Any table
+                  </Text>
+                </Pressable>
+                {tableOptions.slice(0, 18).map((table) => {
+                  const tableLabel =
+                    table.table_number || table.number || table.id;
+                  const tableId = String(table.id || tableLabel);
+                  return (
+                    <Pressable
+                      key={tableId}
+                      style={[
+                        s.zoneChip,
+                        reservationForm.tableId === tableId &&
+                          s.zoneChipActive,
+                      ]}
+                      onPress={() =>
+                        setReservationForm((prev) => ({
+                          ...prev,
+                          tableId,
+                        }))
+                      }
+                    >
+                      <Text
+                        style={[
+                          s.zoneChipText,
+                          reservationForm.tableId === tableId &&
+                            s.zoneChipTextActive,
+                        ]}
+                      >
+                        T{tableLabel}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={s.fieldLabel}>Phone (optional)</Text>
+              <TextInput
+                style={s.input}
+                value={reservationForm.phone}
+                onChangeText={(text) =>
+                  setReservationForm((prev) => ({ ...prev, phone: text }))
+                }
+                keyboardType="phone-pad"
+                placeholder="+91 98xxxxxx"
+                placeholderTextColor="#94A3B8"
+              />
+              <Text style={s.fieldLabel}>Notes (optional)</Text>
+              <TextInput
+                style={[s.input, { minHeight: 58 }]}
+                value={reservationForm.notes}
+                onChangeText={(text) =>
+                  setReservationForm((prev) => ({ ...prev, notes: text }))
+                }
+                placeholder="Anniversary seating"
+                placeholderTextColor="#94A3B8"
+                multiline
+              />
+              <View style={s.modalActions}>
+                <Pressable style={s.cancelBtn} onPress={resetReservationForm}>
+                  <Text style={s.cancelBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[s.createBtn, busy && s.btnDisabled]}
+                  onPress={createReservation}
+                  disabled={busy}
+                >
+                  <Text style={s.createBtnText}>
+                    {busy ? "Saving..." : "Add Reservation"}
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showWalkInForm}
+        animationType="slide"
+        transparent
+        onRequestClose={resetWalkInForm}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHead}>
+              <Text style={s.modalTitle}>Add Walk-in</Text>
+              <Pressable onPress={resetWalkInForm}>
+                <MaterialIcons name="close" size={22} color="#64748B" />
+              </Pressable>
+            </View>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              <Text style={s.fieldLabel}>Guest Name</Text>
+              <TextInput
+                style={s.input}
+                value={walkInForm.name}
+                onChangeText={(text) =>
+                  setWalkInForm((prev) => ({ ...prev, name: text }))
+                }
+                placeholder="Rahul Singh"
+                placeholderTextColor="#94A3B8"
+              />
+              <Text style={s.fieldLabel}>Party Size</Text>
+              <TextInput
+                style={s.input}
+                value={walkInForm.partySize}
+                onChangeText={(text) =>
+                  setWalkInForm((prev) => ({ ...prev, partySize: text }))
+                }
+                keyboardType="number-pad"
+                placeholder="2"
+                placeholderTextColor="#94A3B8"
+              />
+              <Text style={s.fieldLabel}>Phone (optional)</Text>
+              <TextInput
+                style={s.input}
+                value={walkInForm.phone}
+                onChangeText={(text) =>
+                  setWalkInForm((prev) => ({ ...prev, phone: text }))
+                }
+                keyboardType="phone-pad"
+                placeholder="+91 98xxxxxx"
+                placeholderTextColor="#94A3B8"
+              />
+              <Text style={s.fieldLabel}>Quoted Wait (mins)</Text>
+              <TextInput
+                style={s.input}
+                value={walkInForm.quotedMins}
+                onChangeText={(text) =>
+                  setWalkInForm((prev) => ({ ...prev, quotedMins: text }))
+                }
+                keyboardType="number-pad"
+                placeholder="20"
+                placeholderTextColor="#94A3B8"
+              />
+              <View style={s.modalActions}>
+                <Pressable style={s.cancelBtn} onPress={resetWalkInForm}>
+                  <Text style={s.cancelBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[s.createBtn, s.createBtnGreen, busy && s.btnDisabled]}
+                  onPress={createWalkIn}
+                  disabled={busy}
+                >
+                  <Text style={s.createBtnText}>
+                    {busy ? "Saving..." : "Add to Waitlist"}
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={showNewOrder}
         animationType="slide"
@@ -901,16 +1350,42 @@ const s = StyleSheet.create({
     color: "#000",
     letterSpacing: -0.3,
   },
-  newOrderBtn: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#0F172A",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
+    gap: 8,
+    flexShrink: 0,
   },
-  newOrderBtnText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  reservationBtn: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.12)",
+    borderRadius: 21,
+  },
+  queueBtn: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.12)",
+    borderRadius: 21,
+  },
+  newOrderBtn: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.12)",
+    borderRadius: 21,
+  },
 
   /* Scroll */
   scrollView: { flex: 1 },
@@ -1049,6 +1524,71 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.5)",
     justifyContent: "flex-end",
   },
+  choiceOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    justifyContent: "center",
+    padding: 18,
+  },
+  choiceCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 16,
+  },
+  choiceSub: {
+    color: "#64748B",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  choiceActions: { gap: 10 },
+  choiceBtn: {
+    minHeight: 66,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  choiceBtnGreen: { backgroundColor: "#ECFDF5", borderColor: "#D1FAE5" },
+  choiceTextWrap: { flex: 1 },
+  choiceTitle: { color: "#0F172A", fontSize: 15, fontWeight: "900" },
+  choiceTitleGreen: { color: "#047857" },
+  choiceHint: {
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  queuePreviewGrid: { gap: 10, marginTop: 14 },
+  queuePreviewCard: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+  },
+  queuePreviewLabel: {
+    color: "#334155",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  queueRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  queueName: { color: "#0F172A", fontSize: 13, fontWeight: "800" },
+  queueMeta: { color: "#64748B", fontSize: 12, fontWeight: "600", marginTop: 2 },
+  queueEmptyText: { color: "#94A3B8", fontSize: 12, fontWeight: "700" },
   modalSheet: {
     maxHeight: "92%",
     backgroundColor: "#FFFFFF",
@@ -1085,6 +1625,8 @@ const s = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     marginBottom: 4,
   },
+  formGrid: { flexDirection: "row", gap: 10 },
+  formHalf: { flex: 1 },
   segmentRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
   segmentBtn: {
     flex: 1,
@@ -1205,6 +1747,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  createBtnGreen: { backgroundColor: "#059669" },
   createBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
   btnDisabled: { opacity: 0.6 },
 });

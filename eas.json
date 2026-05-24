@@ -9,6 +9,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laW5qbHppeWdsbG51dG1ueW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMjMxMzcsImV4cCI6MjA5MDc5OTEzN30.5VgRSv0hs075Y8EUgq8E_-747spnnUu1S1lXj5DJUls",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "573285599204-c6un4o0a7tdvjd7crn9iu2vd38r2805s.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "573285599204-ijtq79bnl7t5975s6dftglb9ahemrji7.apps.googleusercontent.com",
@@ -22,6 +23,7 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laW5qbHppeWdsbG51dG1ueW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMjMxMzcsImV4cCI6MjA5MDc5OTEzN30.5VgRSv0hs075Y8EUgq8E_-747spnnUu1S1lXj5DJUls",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "573285599204-c6un4o0a7tdvjd7crn9iu2vd38r2805s.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "573285599204-ijtq79bnl7t5975s6dftglb9ahemrji7.apps.googleusercontent.com",
@@ -35,6 +37,7 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laW5qbHppeWdsbG51dG1ueW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMjMxMzcsImV4cCI6MjA5MDc5OTEzN30.5VgRSv0hs075Y8EUgq8E_-747spnnUu1S1lXj5DJUls",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "573285599204-c6un4o0a7tdvjd7crn9iu2vd38r2805s.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "573285599204-ijtq79bnl7t5975s6dftglb9ahemrji7.apps.googleusercontent.com",

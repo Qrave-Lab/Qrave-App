@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
 import { MaterialIcons } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
 import { HapticTab } from "../../components/haptic-tab";
 import { useColorScheme } from "../../hooks/use-color-scheme";
 
@@ -7,12 +7,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import {
-  BackHandler,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    BackHandler,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
@@ -180,6 +180,7 @@ export default function AdminTabLayout() {
         <Tabs.Screen name="settings-access-control" options={{ href: null }} />
         <Tabs.Screen name="settings-feedback" options={{ href: null }} />
         <Tabs.Screen name="settings-delivery-zones" options={{ href: null }} />
+        <Tabs.Screen name="queue" options={{ href: null }} />
         <Tabs.Screen name="billing" options={{ href: null }} />
         <Tabs.Screen name="settings-floor-plan" options={{ href: null }} />
         <Tabs.Screen name="subscription" options={{ href: null }} />

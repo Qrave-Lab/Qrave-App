@@ -2,16 +2,16 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import AdminSettingsHeader from "../../components/AdminSettingsHeader";
 import apiClient from "../../lib/apiClient";
@@ -332,13 +332,20 @@ export default function SettingsTakeaway() {
         title="Takeaway & Delivery"
         subtitle="Take walk-in and delivery orders"
         actionButton={
-          <Pressable
-            style={styles.addBtn}
-            onPress={() => setShowNewOrder(true)}
-          >
-            <MaterialIcons name="add" size={16} color="#FFFFFF" />
-            <Text style={styles.addBtnText}>New Order</Text>
-          </Pressable>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pressable
+              style={styles.queueBtn}
+              onPress={() => router.push("/admin/queue")}
+            >
+              <MaterialIcons name="format-list-bulleted" size={24} color="#0F172A" />
+            </Pressable>
+            <Pressable
+              style={styles.addBtn}
+              onPress={() => setShowNewOrder(true)}
+            >
+              <MaterialIcons name="add" size={24} color="#0F172A" />
+            </Pressable>
+          </View>
         }
       />
 
@@ -723,16 +730,26 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F8FAFC" },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
   loadingText: { marginTop: 8, color: "#64748B", fontWeight: "600" },
-  addBtn: {
-    minHeight: 40,
-    borderRadius: 12,
-    backgroundColor: "#0F172A",
-    paddingHorizontal: 12,
-    flexDirection: "row",
+  queueBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.12)",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
   },
-  addBtnText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  addBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   content: { padding: 12, paddingBottom: 24 },
   filterRow: {
     flexDirection: "row",

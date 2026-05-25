@@ -37,12 +37,27 @@ export const AdminColors = {
 };
 
 export const WaiterColors = {
-  primary: '#0F766E',
-  secondary: '#14B8A6',
-  accent: '#2DD4BF',
-  background: '#F0FDFA',
+  primary: '#16A34A',
+  primaryDark: '#15803D',
+  secondary: '#22C55E',
+  accent: '#4ADE80',
+  background: '#F0FDF4',
   card: '#FFFFFF',
-  text: '#0F172A',
+  text: '#052e16',
+  muted: '#6B7280',
+  border: '#D1FAE5',
+};
+
+export const KitchenColors = {
+  primary: '#EA580C',
+  primaryDark: '#C2410C',
+  secondary: '#F97316',
+  accent: '#FB923C',
+  background: '#FFF7ED',
+  card: '#FFFFFF',
+  text: '#431407',
+  muted: '#78716C',
+  border: '#FED7AA',
 };
 
 export const Fonts = Platform.select({

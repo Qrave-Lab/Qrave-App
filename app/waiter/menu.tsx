@@ -3,17 +3,19 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   ScrollView,
   Image,
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
+  useWindowDimensions,
+  Platform,
 } from "react-native";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
 import WaiterWavyHeader from "../../components/WaiterWavyHeader";
+import { MaterialIcons } from "@expo/vector-icons";
 
 type MenuItem = {
   id: string;
@@ -35,93 +37,11 @@ type CategoryOption = {
   parent_id?: string | null;
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFB" },
-  searchRow: { paddingHorizontal: 16, paddingVertical: 10 },
-  searchInput: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: WaiterColors.text,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  tabsScroll: { maxHeight: 48 },
-  tabsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  tab: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  tabActive: {
-    backgroundColor: WaiterColors.primary,
-    borderColor: WaiterColors.primary,
-  },
-  tabText: {
-    color: "#64748B",
-    fontWeight: "600",
-    textTransform: "capitalize",
-    fontSize: 13,
-  },
-  tabTextActive: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
-  listContent: { paddingHorizontal: 16, paddingBottom: 16 },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  imageBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    overflow: "hidden",
-  },
-  image: { width: 56, height: 56, borderRadius: 10 },
-  name: { fontSize: 15, fontWeight: "700", color: WaiterColors.text },
-  desc: { color: "#64748B", fontSize: 12, marginTop: 2 },
-  price: { fontWeight: "800", color: WaiterColors.text, marginTop: 2 },
-  categoryText: {
-    fontSize: 11,
-    color: "#94A3B8",
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  meta: { marginTop: 2 },
-  loadingBox: { alignItems: "center", paddingVertical: 40 },
-  loadingText: { marginTop: 10, color: "#6b7280", fontWeight: "600" },
-  emptyState: { alignItems: "center", paddingVertical: 40 },
-  emptyStateText: { color: "#6b7280", fontWeight: "600", textAlign: "center" },
-});
-
 export default function WaiterMenu() {
+  const { width } = useWindowDimensions();
+  // Determine if we should use grid or list. Grid for tablets/web
+  const isTablet = width > 700;
+  
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -146,29 +66,12 @@ export default function WaiterMenu() {
       const data = await api.get("/api/admin/menu");
       const list = Array.isArray(data) ? data : [];
       const normalized: MenuItem[] = list.map((item: any) => {
-        const name =
-          typeof item.name === "object"
-            ? (item.name?.String ?? "")
-            : (item.name ?? "");
+        const name = typeof item.name === "object" ? (item.name?.String ?? "") : (item.name ?? "");
         const description = item.description?.String ?? item.description ?? "";
-        const categoryName =
-          typeof item.categoryName === "object"
-            ? (item.categoryName?.String ?? "")
-            : (item.categoryName ?? "");
-        const parentCategoryName =
-          typeof item.parentCategoryName === "object"
-            ? (item.parentCategoryName?.String ?? "")
-            : (item.parentCategoryName ?? "");
-        const imageUrl =
-          item.imageUrl?.String ??
-          item.imageUrl ??
-          item.image_url?.String ??
-          item.image_url ??
-          "";
-        const priceRaw =
-          typeof item.price === "object"
-            ? (item.price?.Float ?? item.price?.Int)
-            : item.price;
+        const categoryName = typeof item.categoryName === "object" ? (item.categoryName?.String ?? "") : (item.categoryName ?? "");
+        const parentCategoryName = typeof item.parentCategoryName === "object" ? (item.parentCategoryName?.String ?? "") : (item.parentCategoryName ?? "");
+        const imageUrl = item.imageUrl?.String ?? item.imageUrl ?? item.image_url?.String ?? item.image_url ?? "";
+        const priceRaw = typeof item.price === "object" ? (item.price?.Float ?? item.price?.Int) : item.price;
 
         return {
           id: String(item.id ?? item.menu_item_id ?? item.item_id ?? name),
@@ -212,23 +115,19 @@ export default function WaiterMenu() {
     setRefreshing(false);
   }, [refreshMenu, refreshCategories]);
 
+  // Waiters might want to see out of stock items but grayed out
   const availableItems = useMemo(() => {
     return items.filter((item) => {
       if (item.isArchived) return false;
       if (!item.isAvailable) return false;
-      if (item.isOutOfStock) return false;
-      if (item.stockCount != null && item.stockCount <= 0) return false;
       return true;
     });
   }, [items]);
 
   const filteredItems = useMemo(() => {
     return availableItems.filter((item) => {
-      const matchesTab =
-        activeCategory === "all" || resolveParentName(item) === activeCategory;
-      const matchesSearch = item.name
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      const matchesTab = activeCategory === "all" || resolveParentName(item) === activeCategory;
+      const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
       return matchesTab && matchesSearch;
     });
   }, [availableItems, activeCategory, search]);
@@ -239,43 +138,40 @@ export default function WaiterMenu() {
   );
 
   return (
-    <View style={styles.container}>
-      <WaiterWavyHeader
-        title="Menu"
-        subtitle="Available items only"
-        height={140}
-      />
+    <View style={s.container}>
+      <WaiterWavyHeader title="Menu" subtitle="Browse menu & availability" height={150} />
 
-      <View style={styles.searchRow}>
-        <TextInput
-          placeholder="Search items..."
-          value={search}
-          onChangeText={setSearch}
-          style={styles.searchInput}
-          placeholderTextColor="#64748B"
-        />
+      <View style={s.searchWrap}>
+        <View style={s.searchBar}>
+          <MaterialIcons name="search" size={20} color="#94A3B8" />
+          <TextInput
+            placeholder="Search for dishes..."
+            value={search}
+            onChangeText={setSearch}
+            style={s.searchInput}
+            placeholderTextColor="#94A3B8"
+          />
+          {search ? (
+            <TouchableOpacity onPress={() => setSearch("")}>
+              <MaterialIcons name="close" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.tabsScroll}
-        contentContainerStyle={styles.tabsContainer}
+        style={s.tabsScroll}
+        contentContainerStyle={s.tabsContainer}
       >
         {categoryTabs.map((tab) => (
           <TouchableOpacity
             key={tab}
             onPress={() => setActiveCategory(tab)}
-            style={[
-              styles.tab,
-              activeCategory === tab ? styles.tabActive : null,
-            ]}
+            style={[s.tab, activeCategory === tab && s.tabActive]}
           >
-            <Text
-              style={
-                activeCategory === tab ? styles.tabTextActive : styles.tabText
-              }
-            >
+            <Text style={[s.tabText, activeCategory === tab && s.tabTextActive]}>
               {tab}
             </Text>
           </TouchableOpacity>
@@ -283,68 +179,176 @@ export default function WaiterMenu() {
       </ScrollView>
 
       {loading ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="small" color={WaiterColors.primary} />
-          <Text style={styles.loadingText}>Loading menu...</Text>
+        <View style={s.loadingBox}>
+          <ActivityIndicator size="large" color={WaiterColors.primary} />
+          <Text style={s.loadingText}>Loading menu...</Text>
         </View>
       ) : loadError ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>{loadError}</Text>
+        <View style={s.emptyState}>
+          <Text style={s.emptyStateText}>{loadError}</Text>
         </View>
       ) : (
-        <FlatList
-          data={filteredItems}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={WaiterColors.primary}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                No available items found.
-              </Text>
+        <ScrollView
+          contentContainerStyle={s.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {filteredItems.length === 0 ? (
+            <View style={s.emptyState}>
+              <MaterialIcons name="restaurant-menu" size={48} color="#CBD5E1" style={{ marginBottom: 16 }} />
+              <Text style={s.emptyStateText}>No items match your search.</Text>
             </View>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.imageBox}>
-                {item.imageUrl && !imageErrors[item.id] ? (
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.image}
-                    onError={() =>
-                      setImageErrors((prev) => ({ ...prev, [item.id]: true }))
-                    }
-                  />
-                ) : (
-                  <Text style={{ color: "#94A3B8", fontWeight: "700" }}>
-                    {item.name.slice(0, 1).toUpperCase()}
-                  </Text>
-                )}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.desc} numberOfLines={2}>
-                  {item.description || "No description"}
-                </Text>
-                <View style={styles.meta}>
-                  <Text style={styles.categoryText}>
-                    {resolveParentName(item)}
-                  </Text>
-                  <Text style={styles.price}>
-                    Rs {item.price.toLocaleString()}
-                  </Text>
-                </View>
-              </View>
+          ) : (
+            <View style={isTablet ? s.gridContainer : s.listContainer}>
+              {filteredItems.map((item) => {
+                const outOfStock = item.isOutOfStock || (item.stockCount != null && item.stockCount <= 0);
+                return (
+                  <View key={item.id} style={[isTablet ? s.gridCard : s.listCard, outOfStock && s.cardOutOfStock]}>
+                    <View style={[isTablet ? s.gridImageBox : s.listImageBox]}>
+                      {item.imageUrl && !imageErrors[item.id] ? (
+                        <Image
+                          source={{ uri: item.imageUrl }}
+                          style={[isTablet ? s.gridImage : s.listImage, outOfStock && { opacity: 0.5, grayscale: 1 } as any]}
+                          onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
+                        />
+                      ) : (
+                        <MaterialIcons name="restaurant" size={32} color="#CBD5E1" />
+                      )}
+                      {outOfStock && (
+                        <View style={s.outOfStockBadge}>
+                          <Text style={s.outOfStockText}>SOLD OUT</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={isTablet ? s.gridContent : s.listContentWrap}>
+                      <Text style={[s.itemName, outOfStock && s.textMuted]} numberOfLines={isTablet ? 1 : 2}>
+                        {item.name}
+                      </Text>
+                      <Text style={s.itemDesc} numberOfLines={2}>
+                        {item.description || "No description"}
+                      </Text>
+                      <View style={s.itemBottom}>
+                        <Text style={s.itemCategory}>{resolveParentName(item)}</Text>
+                        <Text style={[s.itemPrice, outOfStock && s.textMuted]}>
+                          Rs {item.price.toLocaleString()}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           )}
-        />
+        </ScrollView>
       )}
     </View>
   );
 }
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: WaiterColors.background },
+  searchWrap: { paddingHorizontal: 16, paddingVertical: 12, marginTop: 4 },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 52,
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: WaiterColors.text },
+  tabsScroll: { maxHeight: 54, flexGrow: 0, marginBottom: 4 },
+  tabsContainer: { paddingHorizontal: 16, paddingBottom: 10, gap: 10, alignItems: "center" },
+  tab: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  tabActive: { backgroundColor: WaiterColors.primary, borderColor: WaiterColors.primary },
+  tabText: { color: "#64748B", fontWeight: "700", textTransform: "capitalize", fontSize: 13 },
+  tabTextActive: { color: "#FFFFFF", fontWeight: "800" },
+  loadingBox: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 60 },
+  loadingText: { marginTop: 12, color: "#6b7280", fontWeight: "700", fontSize: 15 },
+  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 60, paddingHorizontal: 30 },
+  emptyStateText: { color: "#64748B", fontWeight: "600", fontSize: 15, textAlign: "center" },
+  
+  listContent: { padding: 16, paddingBottom: 40 },
+  listContainer: { gap: 12 },
+  listCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  listImageBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+    overflow: "hidden",
+  },
+  listImage: { width: "100%", height: "100%" },
+  listContentWrap: { flex: 1, justifyContent: "space-between" },
+  
+  gridContainer: { flexDirection: "row", flexWrap: "wrap", gap: 16, justifyContent: "flex-start" },
+  gridCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
+    width: Platform.select({ web: "31%", default: "47%" }),
+    minWidth: 200,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  gridImageBox: {
+    width: "100%",
+    height: 140,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  gridImage: { width: "100%", height: "100%" },
+  gridContent: { padding: 14, flex: 1, justifyContent: "space-between" },
+  
+  itemName: { fontSize: 15, fontWeight: "800", color: WaiterColors.text, marginBottom: 4 },
+  itemDesc: { color: "#64748B", fontSize: 12, lineHeight: 16, marginBottom: 12 },
+  itemBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: "auto" },
+  itemCategory: { fontSize: 11, color: "#94A3B8", fontWeight: "800", textTransform: "uppercase" },
+  itemPrice: { fontSize: 16, fontWeight: "900", color: WaiterColors.primaryDark },
+  
+  cardOutOfStock: { backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" },
+  textMuted: { color: "#94A3B8" },
+  outOfStockBadge: {
+    position: "absolute",
+    backgroundColor: "rgba(15, 23, 42, 0.8)",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  outOfStockText: { color: "#FFFFFF", fontWeight: "900", fontSize: 11, letterSpacing: 1 },
+});

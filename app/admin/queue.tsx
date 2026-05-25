@@ -282,13 +282,13 @@ export default function QueueScreen() {
                     return (
                     <View key={entry.id} style={s.entryCard}>
                       <View style={s.entryTopRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                           <View style={s.rankBadge}>
                             <Text style={s.rankBadgeText}>#{index + 1}</Text>
                           </View>
-                          <Text style={[s.entryName, { marginLeft: 12 }]}>{entry.guest_name}</Text>
+                          <Text style={[s.entryName, { marginLeft: 12 }]} numberOfLines={1}>{entry.guest_name}</Text>
                         </View>
-                        <View style={[s.entryBadge, s.waitBadge, { flexDirection: 'row', alignItems: 'center' }]}>
+                        <View style={[s.entryBadge, s.waitBadge, { flexDirection: 'row', alignItems: 'center', marginLeft: 8 }]}>
                           <MaterialIcons name="schedule" size={14} color="#047857" style={{ marginRight: 4 }} />
                           <Text style={s.waitBadgeText}>Waiting {waitedMinutes(entry.created_at)}m</Text>
                         </View>

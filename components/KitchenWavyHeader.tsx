@@ -1,4 +1,3 @@
-
 import React, { useMemo } from "react";
 import {
   Platform,
@@ -10,28 +9,27 @@ import {
 } from "react-native";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-interface WaiterWavyHeaderProps {
+interface KitchenWavyHeaderProps {
   title?: string;
   subtitle?: string;
   height?: number;
   children?: React.ReactNode;
-  backgroundColor?: string;
 }
 
-export default function WaiterWavyHeader({
+export default function KitchenWavyHeader({
   title,
   subtitle,
-  height = 220,
+  height = 160,
   children,
-  backgroundColor = "#0F766E",
-}: WaiterWavyHeaderProps) {
+}: KitchenWavyHeaderProps) {
   const { width } = useWindowDimensions();
   const curveHeight = height * 0.85;
+
   const gradientIds = useMemo(
     () => ({
-      g1: `whdr_g1_${Math.random().toString(36).slice(2, 9)}`,
-      g2: `whdr_g2_${Math.random().toString(36).slice(2, 9)}`,
-      g3: `whdr_g3_${Math.random().toString(36).slice(2, 9)}`,
+      g1: `khdr_g1_${Math.random().toString(36).slice(2, 9)}`,
+      g2: `khdr_g2_${Math.random().toString(36).slice(2, 9)}`,
+      g3: `khdr_g3_${Math.random().toString(36).slice(2, 9)}`,
     }),
     [],
   );
@@ -60,7 +58,6 @@ export default function WaiterWavyHeader({
     Z
   `;
 
-
   return (
     <View style={[styles.container, { height }]}>
       <View style={StyleSheet.absoluteFill}>
@@ -71,20 +68,20 @@ export default function WaiterWavyHeader({
           preserveAspectRatio="none"
         >
           <Defs>
-            {/* Lightest layer — fresh mint shimmer */}
+            {/* Lightest layer — warm amber shimmer */}
             <LinearGradient id={gradientIds.g1} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#BBF7D0" stopOpacity="0.5" />
-              <Stop offset="1" stopColor="#86EFAC" stopOpacity="0.35" />
+              <Stop offset="0" stopColor="#FED7AA" stopOpacity="0.5" />
+              <Stop offset="1" stopColor="#FDBA74" stopOpacity="0.35" />
             </LinearGradient>
-            {/* Mid layer — vibrant green glow */}
+            {/* Mid layer — orange glow */}
             <LinearGradient id={gradientIds.g2} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#4ADE80" stopOpacity="0.55" />
-              <Stop offset="1" stopColor="#22C55E" stopOpacity="0.45" />
+              <Stop offset="0" stopColor="#FB923C" stopOpacity="0.55" />
+              <Stop offset="1" stopColor="#F97316" stopOpacity="0.45" />
             </LinearGradient>
-            {/* Base layer — deep emerald gradient */}
+            {/* Base layer — deep burnt-orange gradient */}
             <LinearGradient id={gradientIds.g3} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#16A34A" stopOpacity="1" />
-              <Stop offset="1" stopColor="#15803D" stopOpacity="1" />
+              <Stop offset="0" stopColor="#EA580C" stopOpacity="1" />
+              <Stop offset="1" stopColor="#C2410C" stopOpacity="1" />
             </LinearGradient>
           </Defs>
           <Path d={path1} fill={`url(#${gradientIds.g1})`} />
@@ -111,7 +108,10 @@ const styles = StyleSheet.create({
   container: {
     width: "100%",
     overflow: "hidden",
-    paddingTop: Platform.OS === "android" || Platform.OS === "ios" ? (StatusBar.currentHeight ?? 24) : 0,
+    paddingTop:
+      Platform.OS === "android" || Platform.OS === "ios"
+        ? (StatusBar.currentHeight ?? 24)
+        : 0,
     marginBottom: -2,
   },
   content: {
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 13,
-    color: "rgba(255,255,255,0.85)",
+    color: "rgba(255,255,255,0.88)",
     fontWeight: "600",
     marginTop: 4,
   },

@@ -23,7 +23,6 @@ import {
   ScrollView,
   View,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
   Text,
@@ -32,10 +31,10 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
+  FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { ThemedText, type ThemedTextProps } from "../../components/themed-text";
-import { IconSymbol } from "../../components/ui/icon-symbol";
+import { MaterialIcons } from "@expo/vector-icons";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
 import WaiterWavyHeader from "../../components/WaiterWavyHeader";
@@ -123,13 +122,7 @@ type ServiceCallAPI = {
   created_at: string;
 };
 
-const WaiterText = ({
-  lightColor = WaiterColors.text,
-  darkColor = WaiterColors.text,
-  ...rest
-}: ThemedTextProps) => (
-  <ThemedText lightColor={lightColor} darkColor={darkColor} {...rest} />
-);
+
 
 const SAMPLE_TABLES: Table[] = [
   { id: "T1", items: 5, total: "Rs 1420", status: "occupied", time: "38m" },
@@ -161,7 +154,6 @@ export default function CustomizeTables() {
   const [sortBy, setSortBy] = useState<"number" | "value" | "time">("number");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
 
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [moveSource, setMoveSource] = useState<string | null>(null);
   const [moveLoading, setMoveLoading] = useState(false);
@@ -177,6 +169,7 @@ export default function CustomizeTables() {
   const [paidLoading, setPaidLoading] = useState(false);
   const [freeLoading, setFreeLoading] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string>("");
+  
   const [billGroups, setBillGroups] = useState<Map<number, BillGroupInfo>>(
     new Map(),
   );
@@ -892,7 +885,7 @@ export default function CustomizeTables() {
     // Confirm
     Alert.alert(
       "Free Table",
-      `Free Table ${tableNumber ?? tableId}? Any unpaid orders will remain in the system.`,
+      `Free Table ${tableNumber ?? tableId}? This will cancel all active orders for this table.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -900,49 +893,65 @@ export default function CustomizeTables() {
           style: "destructive",
           onPress: async () => {
             setFreeLoading(tableId);
-            // Update local state immediately
-            setTablesData((prev) =>
-              prev.map((t) =>
-                t.id === tableId
-                  ? {
-                      ...t,
-                      status: "free",
-                      isActive: false,
-                      items: 0,
-                      total: "-",
-                      time: undefined,
-                      flag: undefined,
-                    }
-                  : t,
-              ),
-            );
-
-            setActiveOrders((prevOrders) => {
-              const nextOrders =
-                tableNumber !== undefined
-                  ? prevOrders.filter((o) => o.table_number !== tableNumber)
-                  : prevOrders;
-              setServiceCalls((prevCalls) => {
-                const nextCalls =
-                  tableNumber !== undefined
-                    ? prevCalls.filter((c) => c.table_number !== tableNumber)
-                    : prevCalls;
-                setActivities([
-                  ...buildKitchenActivities(nextOrders),
-                  ...buildServiceActivities(nextCalls),
-                ]);
-                return nextCalls;
-              });
-              return nextOrders;
-            });
-
-            // Refresh from server
             try {
+              // Cancel all active orders for this table on the backend
+              const activeOrdersForTable = activeOrders.filter((o) => o.table_number === tableNumber && o.orderId);
+              for (const order of activeOrdersForTable) {
+                if (order.orderId) {
+                  await api.patch(`/api/admin/orders/${order.orderId}/status`, { status: "cancelled" });
+                }
+              }
+
+              // Also cancel any open sessions if such API exists (best-effort)
+              try {
+                await api.post(`/api/admin/tables/${tableId}/clear`, {});
+              } catch (e) {
+                // Ignore if endpoint doesn't exist
+              }
+
+              // Update local state immediately
+              setTablesData((prev) =>
+                prev.map((t) =>
+                  t.id === tableId
+                    ? {
+                        ...t,
+                        status: "free",
+                        isActive: false,
+                        items: 0,
+                        total: "-",
+                        time: undefined,
+                        flag: undefined,
+                      }
+                    : t,
+                ),
+              );
+
+              setActiveOrders((prevOrders) => {
+                const nextOrders =
+                  tableNumber !== undefined
+                    ? prevOrders.filter((o) => o.table_number !== tableNumber)
+                    : prevOrders;
+                setServiceCalls((prevCalls) => {
+                  const nextCalls =
+                    tableNumber !== undefined
+                      ? prevCalls.filter((c) => c.table_number !== tableNumber)
+                      : prevCalls;
+                  setActivities([
+                    ...buildKitchenActivities(nextOrders),
+                    ...buildServiceActivities(nextCalls),
+                  ]);
+                  return nextCalls;
+                });
+                return nextOrders;
+              });
+
+              // Refresh from server
               await Promise.all([loadTables(), refreshActivities()]);
-            } catch {
-              // local state is already updated
+            } catch (e: any) {
+              Alert.alert("Error", e?.message || "Failed to free table on the server.");
+            } finally {
+              setFreeLoading(null);
             }
-            setFreeLoading(null);
           },
         },
       ],
@@ -971,9 +980,7 @@ export default function CustomizeTables() {
   }, [activeOrders, tablesData]);
 
   const isKitchenVisible = (a: Activity) =>
-    a.channel === "kitchen" &&
-    a.status !== "served" &&
-    a.status !== "cancelled";
+    a.channel === "kitchen" && a.status !== "served" && a.status !== "cancelled";
   const isServiceVisible = (a: Activity) =>
     a.channel === "service" && a.status !== "done";
 
@@ -1004,641 +1011,761 @@ export default function CustomizeTables() {
     [activeOrders, router, restaurantId],
   );
 
+  /* ── Derived counts ── */
+  const pendingOrders = activeOrders.filter((o) => o.status === "pending").length;
+  const activeServiceCalls = serviceCalls.filter((c) => c.status !== "done").length;
+  const kitchenCount = activities.filter(isKitchenVisible).length;
+  const serviceCount = activities.filter(isServiceVisible).length;
+  const totalActivityCount = kitchenCount + serviceCount;
+  const occupiedTableCount = tablesWithOrders.filter((t) => t.status === "occupied").length;
+  const freeTableCount = tablesWithOrders.filter((t) => t.status === "free").length;
+
+  // Action sheet state
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
+  const [actionTableId, setActionTableId] = useState<string | null>(null);
+  const [activitySheetOpen, setActivitySheetOpen] = useState(false);
+
+  const actionTable = actionTableId ? tablesWithOrders.find((t) => t.id === actionTableId) : null;
+  const actionTableNumber = actionTable ? getTableNumber(actionTable) : undefined;
+  const actionTableBg = actionTableNumber !== undefined ? billGroups.get(actionTableNumber) : undefined;
+
+  const padNumber = (n: number | string | undefined) => {
+    if (n === undefined || n === null) return "??";
+    const num = Number(n);
+    if (isNaN(num)) return String(n);
+    return num < 10 ? `0${num}` : String(num);
+  };
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: "#F8FAFB" }}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={WaiterColors.primary}
-        />
-      }
-    >
-      <WaiterWavyHeader title="Floor Overview" height={140}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-            width: "100%",
-          }}
-        >
-          <View>
-            <Text
-              style={{
-                fontSize: 22,
-                fontWeight: "900",
-                color: "#fff",
-                letterSpacing: -0.5,
-              }}
-            >
-              Floor Overview
-            </Text>
+    <View style={styles.mainContainer}>
+      {/* ── Wavy Header ── */}
+      <WaiterWavyHeader height={160}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Floor Overview</Text>
+            <View style={styles.headerLocationRow}>
+              <MaterialIcons name="location-on" size={14} color="rgba(255,255,255,0.75)" />
+              <Text style={styles.headerLocation}>Main Dining Hall</Text>
+            </View>
           </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={{ fontSize: 16, fontWeight: "800", color: "#fff" }}>
-              {formatRupees(todaySales)}
-            </Text>
-            <Text
-              style={{
-                fontSize: 12,
-                color: "rgba(255,255,255,0.85)",
-                fontWeight: "600",
-              }}
-            >
-              {occupiedCount} / {totalTables} tables
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={styles.bellBtn}
+            onPress={() => {
+              setActivitySheetOpen(true);
+              refreshActivities();
+            }}
+          >
+            <MaterialIcons name="notifications-none" size={24} color="#fff" />
+            {totalActivityCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>
+                  {totalActivityCount > 9 ? "9+" : totalActivityCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       </WaiterWavyHeader>
-      {loading && (
-        <View style={{ padding: 16 }}>
-          <WaiterText>Loading tables...</WaiterText>
-        </View>
-      )}
-      {error && (
-        <View style={{ padding: 16 }}>
-          <WaiterText style={{ color: "red" }}>{error}</WaiterText>
-        </View>
-      )}
 
-      <View style={styles.metricsRow}>
-        <View style={styles.metricCard}>
-          <View style={[styles.metricIcon, styles.metricPendingBg]}>
-            <IconSymbol name="fork.knife" size={18} color="#374151" />
-          </View>
-          <WaiterText type="defaultSemiBold">Pending</WaiterText>
-          <WaiterText type="defaultSemiBold">Orders</WaiterText>
-          <WaiterText type="title">
-            {activeOrders.filter((o) => o.status === "pending").length}
-          </WaiterText>
-        </View>
-        <View style={styles.metricCard}>
-          <View style={[styles.metricIcon, styles.metricBillBg]}>
-            <IconSymbol name="doc.text" size={18} color="#1E3A8A" />
-          </View>
-          <WaiterText type="defaultSemiBold">Bill Request</WaiterText>
-          <WaiterText type="title">0</WaiterText>
-        </View>
-        <View style={styles.metricCard}>
-          <View style={[styles.metricIcon, styles.metricServiceBg]}>
-            <IconSymbol name="bell.fill" size={18} color="#075985" />
-          </View>
-          <WaiterText type="defaultSemiBold">Service Calls</WaiterText>
-          <WaiterText type="title">
-            {serviceCalls.filter((c) => c.status !== "done").length}
-          </WaiterText>
-        </View>
-        <View style={styles.metricCard}>
-          <View style={[styles.metricIcon, styles.metricLongBg]}>
-            <IconSymbol name="clock" size={18} color="#7F1D1D" />
-          </View>
-          <WaiterText type="defaultSemiBold">Long Sitting</WaiterText>
-          <WaiterText type="title">0</WaiterText>
-        </View>
-      </View>
-
-      <View style={styles.controlsRow}>
-        <View style={styles.filtersRow}>
-          {[
-            { key: "all", label: "All" },
-            { key: "occupied", label: "Occupied" },
-            { key: "free", label: "Free" },
-            { key: "bill", label: "Bill Requested" },
-          ].map((f) => (
-            <TouchableOpacity
-              key={f.key}
-              onPress={() => setFilter(f.key)}
-              style={[
-                styles.filterBtn,
-                filter === f.key
-                  ? styles.filterActive
-                  : { backgroundColor: WaiterColors.card },
-              ]}
-            >
-              <Text
-                style={
-                  filter === f.key ? styles.filterTextActive : styles.filterText
-                }
-              >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <TextInput
-            placeholder="Search table..."
-            value={search}
-            onChangeText={setSearch}
-            style={styles.searchInput}
+      {/* ── Main Scroll Body ── */}
+      <ScrollView
+        style={styles.scrollBody}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={WaiterColors.primary}
+            colors={[WaiterColors.primary]}
           />
+        }
+      >
+        {loading && (
+          <View style={{ padding: 16, alignItems: "center" }}>
+            <ActivityIndicator size="small" color={WaiterColors.primary} />
+            <Text style={{ marginTop: 6, color: "#9CA3AF" }}>Loading tables...</Text>
+          </View>
+        )}
+        {error && (
+          <View style={{ padding: 16 }}>
+            <Text style={{ color: "#EF4444" }}>{error}</Text>
+          </View>
+        )}
 
-          <View style={{ position: "relative" }}>
+        {/* ── Metrics Row ── */}
+        <View style={styles.metricsRow}>
+          <TouchableOpacity style={styles.metricCard} onPress={() => setFilter("all")}>
+            <View style={[styles.metricIcon, { backgroundColor: "#FEF2F2" }]}>
+              <MaterialIcons name="pending-actions" size={18} color="#EF4444" />
+            </View>
+            <Text style={styles.metricNum}>{pendingOrders}</Text>
+            <Text style={styles.metricLabel}>Pending</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.metricCard}>
+            <View style={[styles.metricIcon, { backgroundColor: "#DCFCE7" }]}>
+              <MaterialIcons name="receipt-long" size={18} color={WaiterColors.primaryDark} />
+            </View>
+            <Text style={styles.metricNum}>0</Text>
+            <Text style={styles.metricLabel}>Bills</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.metricCard}>
+            <View style={[styles.metricIcon, { backgroundColor: "#EFF6FF" }]}>
+              <MaterialIcons name="room-service" size={18} color="#3B82F6" />
+            </View>
+            <Text style={styles.metricNum}>{activeServiceCalls}</Text>
+            <Text style={styles.metricLabel}>Service</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.metricCard}>
+            <View style={[styles.metricIcon, { backgroundColor: "#F5F3FF" }]}>
+              <MaterialIcons name="timer" size={18} color="#8B5CF6" />
+            </View>
+            <Text style={styles.metricNum}>0</Text>
+            <Text style={styles.metricLabel}>Long Sit</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Search Bar ── */}
+        <View style={styles.searchBarWrap}>
+          <View style={styles.searchBar}>
+            <MaterialIcons name="search" size={20} color="#9CA3AF" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search tables..."
+              placeholderTextColor="#9CA3AF"
+              value={search}
+              onChangeText={setSearch}
+            />
             <TouchableOpacity
-              style={styles.sortBtn}
-              onPress={() => setSortMenuOpen((s) => !s)}
+              style={styles.searchTuneBtn}
+              onPress={() => setSortMenuOpen(!sortMenuOpen)}
             >
-              <Text>Sort by</Text>
+              <MaterialIcons name="tune" size={18} color="#6B7280" />
             </TouchableOpacity>
-            {sortMenuOpen ? (
-              <View style={styles.sortMenu}>
-                {[
-                  { key: "number", label: "Sort by Number" },
-                  { key: "value", label: "Sort by Value" },
-                  { key: "time", label: "Sort by Time" },
-                ].map((op) => (
-                  <TouchableOpacity
-                    key={op.key}
-                    onPress={() => {
-                      setSortBy(op.key as any);
-                      setSortMenuOpen(false);
-                    }}
-                    style={styles.sortItem}
+          </View>
+        </View>
+
+        {/* ── Sort Pills ── */}
+        {sortMenuOpen && (
+          <View style={styles.sortMenu}>
+            <Text style={styles.sortMenuLabel}>SORT BY</Text>
+            <View style={styles.sortOptions}>
+              {(["number", "value", "time"] as const).map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.sortOption, sortBy === opt && styles.sortOptionActive]}
+                  onPress={() => setSortBy(opt)}
+                >
+                  <Text style={[styles.sortOptionText, sortBy === opt && styles.sortOptionTextActive]}>
+                    {opt === "number" ? "Number" : opt === "value" ? "Value" : "Time"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Filter Chips ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filtersScroll}
+          contentContainerStyle={{ paddingHorizontal: 16 }}
+        >
+          <TouchableOpacity
+            style={[styles.filterChip, filter === "all" && styles.filterChipActive]}
+            onPress={() => setFilter("all")}
+          >
+            <MaterialIcons name="grid-view" size={14} color={filter === "all" ? "#FFF" : "#6B7280"} style={{ marginRight: 4 }} />
+            <Text style={[styles.filterChipText, filter === "all" && styles.filterChipTextActive]}>
+              All Tables
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, filter === "occupied" && styles.filterChipActive]}
+            onPress={() => setFilter("occupied")}
+          >
+            <MaterialIcons name="people" size={14} color={filter === "occupied" ? "#FFF" : "#6B7280"} style={{ marginRight: 4 }} />
+            <Text style={[styles.filterChipText, filter === "occupied" && styles.filterChipTextActive]}>
+              Occupied({occupiedTableCount})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, filter === "free" && styles.filterChipActive]}
+            onPress={() => setFilter("free")}
+          >
+            <MaterialIcons name="event-available" size={14} color={filter === "free" ? "#FFF" : "#6B7280"} style={{ marginRight: 4 }} />
+            <Text style={[styles.filterChipText, filter === "free" && styles.filterChipTextActive]}>
+              Available({freeTableCount})
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* ── Table Grid ── */}
+        <View style={styles.tablesGrid}>
+          {tables.map((item) => {
+            const tNum = getTableNumber(item);
+            const isFree = item.status === "free" || !item.isActive;
+            const isBillReq = item.flag === "bill";
+            const bg = tNum !== undefined ? billGroups.get(tNum) : undefined;
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.tableCard,
+                  isFree && styles.tableCardFree,
+                  !isFree && !isBillReq && styles.tableCardOccupied,
+                  isBillReq && styles.tableCardBill,
+                ]}
+                activeOpacity={isFree ? 0.85 : 0.7}
+                onPress={() => {
+                  setActionTableId(item.id);
+                  setActionSheetOpen(true);
+                }}
+              >
+                {/* Card Header */}
+                <View style={styles.tableCardHeader}>
+                  <Text style={styles.tableNumber}>{padNumber(tNum)}</Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor: isFree
+                          ? "#F3F4F6"
+                          : isBillReq
+                          ? "#FEF2F2"
+                          : "#DCFCE7",
+                      },
+                    ]}
                   >
                     <Text
-                      style={
-                        sortBy === op.key ? { fontWeight: "700" } : undefined
-                      }
+                      style={[
+                        styles.statusText,
+                        {
+                          color: isFree
+                            ? "#9CA3AF"
+                            : isBillReq
+                            ? "#EF4444"
+                            : WaiterColors.primaryDark,
+                        },
+                      ]}
                     >
-                      {op.label}
+                      {isFree ? "FREE" : isBillReq ? "Bill Req" : "SEATED"}
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        </View>
-      </View>
+                  </View>
+                </View>
 
-      <FlatList
-        data={tables}
-        keyExtractor={(t) => t.id}
-        numColumns={2}
-        columnWrapperStyle={{ justifyContent: "space-between" }}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.tableCard,
-              !item.isActive ? styles.tableFree : null,
-              item.flag === "bill" ? styles.tableBill : null,
-              item.flag === "long" ? styles.tableLong : null,
-              freeLoading === item.id ? { opacity: 0.5 } : null,
-            ]}
-            activeOpacity={1}
-          >
-            <TouchableOpacity
-              style={styles.optionsBtn}
-              onPress={() =>
-                setOpenMenuId(openMenuId === item.id ? null : item.id)
-              }
-            >
-              <Text style={{ fontSize: 18 }}>...</Text>
-            </TouchableOpacity>
-            {openMenuId === item.id ? (
-              <View style={styles.optionsMenu}>
-                {[
-                  {
-                    key: "order",
-                    label: "Place Order",
-                    icon: "cart",
-                  },
-                  ...(item.isActive
-                    ? [
-                        {
-                          key: "move",
-                          label: "Move Table",
-                          icon: "arrow.right.arrow.left",
-                        },
-                        {
-                          key: "merge",
-                          label: "Merge Bill",
-                          icon: "arrow.triangle.branch",
-                        },
-                        { key: "print", label: "Print Bill", icon: "doc.text" },
-                        {
-                          key: "paid",
-                          label: "Mark Paid",
-                          icon: "checkmark.circle",
-                          tone: "success",
-                        },
-                        {
-                          key: "free",
-                          label: "Free Table",
-                          icon: "square.and.arrow.up",
-                        },
-                      ]
-                    : []),
-                ].map((op: any) => (
-                  <TouchableOpacity
-                    key={op.key}
-                    onPress={() => {
-                      setOpenMenuId(null);
-                      if (op.key === "order") {
-                        handleOpenTakeOrder(item);
-                        return;
-                      }
-                      if (op.key === "move") {
-                        setMoveError(null);
-                        setMoveSource(item.id);
-                        setMoveModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "merge") {
-                        setMergeError(null);
-                        setMergeSource(item.id);
-                        setMergeModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "print") {
-                        setPrintSource(item.id);
-                        setPrintModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "paid") {
-                        setPaidSource(item.id);
-                        setPaidModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "free") {
-                        handleFreeTable(item.id);
-                        return;
-                      }
-                    }}
-                    style={styles.optionsItem}
-                  >
-                    <View style={styles.optionsItemRow}>
-                      <IconSymbol
-                        name={op.icon as any}
-                        size={16}
-                        color={
-                          op.tone === "success" ? "#16a34a" : WaiterColors.text
-                        }
-                      />
-                      <Text
-                        style={
-                          op.tone === "success"
-                            ? styles.optionsItemTextSuccess
-                            : styles.optionsItemText
-                        }
-                      >
-                        {op.label}
-                      </Text>
+                {/* Merged badge */}
+                {bg && bg.linkedTableNumbers.length > 1 && (
+                  <View style={styles.mergedBadge}>
+                    <Text style={styles.mergedBadgeText}>
+                      🔗 T{bg.linkedTableNumbers.filter((n) => n !== tNum).join(", T")}
+                    </Text>
+                  </View>
+                )}
+
+                {isFree ? (
+                  /* Free table empty state */
+                  <View style={styles.emptyStateContainer}>
+                    <MaterialIcons name="table-restaurant" size={32} color="#D1D5DB" />
+                    <Text style={styles.availableText}>Available</Text>
+                  </View>
+                ) : (
+                  /* Occupied table info */
+                  <View style={styles.tableInfoSection}>
+                    <View style={styles.infoRow}>
+                      <MaterialIcons name="restaurant" size={14} color="#6B7280" />
+                      <Text style={styles.infoText}>{item.items} Items</Text>
                     </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-            <View>
-              <WaiterText type="title">
-                Table {item.number || item.id}
-              </WaiterText>
-              {item.mergedWith && item.mergedWith.length > 0 ? (
-                <View style={styles.mergedBadge}>
-                  <Text style={styles.mergedBadgeText}>
-                    🔗 Merged with T{item.mergedWith.join(", T")}
-                  </Text>
-                </View>
-              ) : null}
-              <WaiterText
-                style={{
-                  color: item.isActive ? "green" : "#94a3b8",
-                  fontWeight: "bold",
-                }}
-              >
-                {item.isActive ? "Seated" : "Available"}
-              </WaiterText>
-              <View style={styles.tableMetaRow}>
-                <IconSymbol
-                  name={item.isActive ? "clock" : "fork.knife"}
-                  size={14}
-                  color={item.isActive ? "#94a3b8" : "#cbd5e1"}
-                />
-                <WaiterText
-                  style={
-                    item.isActive
-                      ? styles.tableMetaText
-                      : styles.tableMetaTextMuted
-                  }
-                >
-                  {item.isActive ? item.time || "Just now" : "Available"}
-                </WaiterText>
-              </View>
-            </View>
-            {item.isActive ? (
-              <View style={styles.tableStats}>
-                <View style={styles.itemsBox}>
-                  <WaiterText>ITEMS</WaiterText>
-                  <WaiterText type="defaultSemiBold">{item.items}</WaiterText>
-                </View>
-                <WaiterText type="defaultSemiBold">{item.total}</WaiterText>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        )}
-        ListFooterComponent={<View style={{ height: 8 }} />}
-      />
+                    <View style={styles.infoRow}>
+                      <MaterialIcons name="schedule" size={14} color="#6B7280" />
+                      <Text style={styles.infoText}>{item.time || "0m"}</Text>
+                    </View>
+                    <View style={styles.cardDivider} />
+                    <Text style={styles.totalAmount}>{item.total}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
 
-      {/* Merge modal */}
+      {/* ══════════════════════════════════════════════
+          TABLE ACTION BOTTOM SHEET
+          ══════════════════════════════════════════════ */}
       <Modal
-        visible={mergeModalOpen}
+        visible={actionSheetOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          if (!mergeLoading) {
-            setMergeModalOpen(false);
-            setMergeError(null);
-          }
-        }}
+        statusBarTranslucent
+        onRequestClose={() => setActionSheetOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <WaiterText type="title">Merge Bill</WaiterText>
-              <TouchableOpacity
-                onPress={() => {
-                  if (!mergeLoading) {
-                    setMergeModalOpen(false);
-                    setMergeError(null);
-                  }
-                }}
-              >
-                <Text style={{ fontSize: 18 }}>✕</Text>
+        <View style={styles.bottomSheetOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setActionSheetOpen(false)} />
+          <View style={styles.bottomSheet}>
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetTitle}>
+                  Table {actionTableNumber !== undefined ? padNumber(actionTableNumber) : "?"} - Manage
+                </Text>
+                {actionTableBg && actionTableBg.linkedTableNumbers.length > 1 && (
+                  <Text style={styles.sheetSubtitle}>
+                    🔗 Merged with T{actionTableBg.linkedTableNumbers.filter((n) => n !== actionTableNumber).join(", T")}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity style={styles.closeBtn} onPress={() => setActionSheetOpen(false)}>
+                <MaterialIcons name="close" size={18} color="#6B7280" />
               </TouchableOpacity>
             </View>
-            <WaiterText style={{ marginBottom: 12 }}>
-              {(() => {
-                const src = tablesWithOrders.find((t) => t.id === mergeSource);
-                const label = src
-                  ? `T${src.number ?? getTableNumber(src) ?? src.id}`
-                  : mergeSource;
-                return `Merging ${label} into another occupied table`;
-              })()}
-            </WaiterText>
-            {mergeError ? (
-              <WaiterText style={{ color: "red", marginBottom: 8 }}>
-                {mergeError}
-              </WaiterText>
-            ) : null}
-            {mergeLoading ? (
-              <View style={{ padding: 24, alignItems: "center" }}>
-                <ActivityIndicator size="large" color={WaiterColors.primary} />
-                <WaiterText style={{ marginTop: 10 }}>
-                  Merging bills...
-                </WaiterText>
-              </View>
-            ) : (
-              <FlatList
-                data={tablesWithOrders.filter(
-                  (t) => t.id !== mergeSource && t.status === "occupied",
-                )}
-                keyExtractor={(t) => t.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.mergeRow}
-                    onPress={() => handleMergeTable(item.id)}
-                    disabled={mergeLoading}
-                  >
-                    <View style={styles.tableThumbnail}>
-                      <Text>{`T${item.number ?? getTableNumber(item) ?? item.id}`}</Text>
-                    </View>
-                    <View style={styles.tableInfo}>
-                      <Text style={styles.amountText}>{item.total} Bill</Text>
-                      <Text style={styles.guestsText}>Items: {item.items}</Text>
-                    </View>
-                    <Text style={{ fontSize: 18 }}>→</Text>
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <View style={styles.emptyMoveState}>
-                    <WaiterText>
-                      No other occupied tables to merge with.
-                    </WaiterText>
+
+            {/* Summary bar */}
+            {actionTable && actionTable.status === "occupied" && (
+              <View style={styles.statusCard}>
+                <View style={styles.statusMain}>
+                  <Text style={styles.statusLabel}>Current Bill</Text>
+                  <Text style={styles.statusValue}>{actionTable?.total || "-"}</Text>
+                </View>
+                <View style={styles.verticalDivider} />
+                <View style={styles.statusDetails}>
+                  <View style={styles.statusDetailRow}>
+                    <MaterialIcons name="restaurant" size={14} color="#6B7280" />
+                    <Text style={styles.statusDetailText}>{actionTable?.items || 0} Items</Text>
                   </View>
-                }
-              />
+                  <View style={styles.statusDetailRow}>
+                    <MaterialIcons name="schedule" size={14} color="#6B7280" />
+                    <Text style={styles.statusDetailText}>{actionTable?.time || "0m"}</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Quick Actions */}
+            <Text style={styles.sectionLabel}>Quick Actions</Text>
+            <View style={styles.actionGrid}>
+              {/* Place Order — always available */}
+              <TouchableOpacity
+                style={[styles.actionBtnStyle, styles.actionBtnOrder]}
+                onPress={() => {
+                  setActionSheetOpen(false);
+                  if (actionTable) handleOpenTakeOrder(actionTable);
+                }}
+              >
+                <MaterialIcons name="add-shopping-cart" size={24} color={WaiterColors.primaryDark} />
+                <Text style={styles.actionBtnOrderText}>Place Order</Text>
+              </TouchableOpacity>
+
+              {actionTable && actionTable.status === "occupied" && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.actionBtnStyle, styles.actionBtnPrimary]}
+                    onPress={() => {
+                      setActionSheetOpen(false);
+                      setPaidSource(actionTableId);
+                      setPaidModalOpen(true);
+                    }}
+                  >
+                    <MaterialIcons name="payments" size={24} color={WaiterColors.primaryDark} />
+                    <Text style={styles.actionBtnPrimaryText}>Mark Paid</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionBtnStyle}
+                    onPress={() => {
+                      setActionSheetOpen(false);
+                      setPrintSource(actionTableId);
+                      setPrintModalOpen(true);
+                    }}
+                  >
+                    <MaterialIcons name="print" size={24} color="#6B7280" />
+                    <Text style={styles.actionBtnStyleText}>Print</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionBtnStyle}
+                    onPress={() => {
+                      setActionSheetOpen(false);
+                      setMoveSource(actionTableId);
+                      setMoveError(null);
+                      setMoveModalOpen(true);
+                    }}
+                  >
+                    <MaterialIcons name="swap-horiz" size={24} color="#6B7280" />
+                    <Text style={styles.actionBtnStyleText}>Move</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionBtnStyle}
+                    onPress={() => {
+                      setActionSheetOpen(false);
+                      setMergeSource(actionTableId);
+                      setMergeError(null);
+                      setMergeModalOpen(true);
+                    }}
+                  >
+                    <MaterialIcons name="merge-type" size={24} color="#6B7280" />
+                    <Text style={styles.actionBtnStyleText}>Merge</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+
+            {/* Clear & Free */}
+            {actionTable && actionTable.status === "occupied" && (
+              <TouchableOpacity
+                style={styles.dangerBtn}
+                onPress={() => {
+                  setActionSheetOpen(false);
+                  if (actionTableId) handleFreeTable(actionTableId);
+                }}
+              >
+                <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
+                <Text style={styles.dangerBtnText}>Clear & Free Table</Text>
+              </TouchableOpacity>
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Move modal */}
+      {/* ══════════════════════════════════════════════
+          ACTIVITY BOTTOM SHEET
+          ══════════════════════════════════════════════ */}
+      <Modal
+        visible={activitySheetOpen}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setActivitySheetOpen(false)}
+      >
+        <View style={styles.bottomSheetOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setActivitySheetOpen(false)} />
+          <View style={styles.bottomSheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Activity Feed</Text>
+              <TouchableOpacity style={styles.closeBtn} onPress={() => setActivitySheetOpen(false)}>
+                <MaterialIcons name="close" size={18} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Tabs */}
+            <View style={styles.modalTabsRow}>
+              <TouchableOpacity
+                style={[styles.modalTabBtn, activityTab === "kitchen" && styles.modalTabBtnActive]}
+                onPress={() => setActivityTab("kitchen")}
+              >
+                <Text style={[styles.modalTabLabel, activityTab === "kitchen" && styles.modalTabLabelActive]}>
+                  Kitchen({kitchenCount})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalTabBtn, activityTab === "service" && styles.modalTabBtnActive]}
+                onPress={() => setActivityTab("service")}
+              >
+                <Text style={[styles.modalTabLabel, activityTab === "service" && styles.modalTabLabelActive]}>
+                  Service({serviceCount})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {activityLoading ? (
+              <View style={styles.emptyState}>
+                <ActivityIndicator size="large" color={WaiterColors.primary} />
+              </View>
+            ) : activityError ? (
+              <View style={{ padding: 16 }}>
+                <Text style={{ color: "#EF4444" }}>{activityError}</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                {activities.filter((a) =>
+                  activityTab === "kitchen" ? isKitchenVisible(a) : isServiceVisible(a),
+                ).length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <MaterialIcons name="check-circle" size={48} color="#D1D5DB" />
+                    <Text style={{ marginTop: 12, color: "#9CA3AF", fontWeight: "600" }}>
+                      No new activities
+                    </Text>
+                  </View>
+                ) : (
+                  activities
+                    .filter((a) =>
+                      activityTab === "kitchen" ? isKitchenVisible(a) : isServiceVisible(a),
+                    )
+                    .map((a) => (
+                      <View key={a.id} style={styles.activityCard}>
+                        <View style={styles.activityCardHeader}>
+                          <View style={styles.activityBadge}>
+                            <Text style={styles.activityBadgeText}>{a.table}</Text>
+                          </View>
+                          <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.activityTitle}>{a.title}</Text>
+                            <Text style={styles.activityNote}>{a.note}</Text>
+                          </View>
+                          <View style={styles.statusChip}>
+                            <Text style={styles.statusChipText}>{a.status}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.activityActions}>
+                          {a.channel === "kitchen" ? (
+                            <>
+                              {a.status === "pending" ? (
+                                <>
+                                  <TouchableOpacity
+                                    style={[styles.actBtn, styles.actBtnReject]}
+                                    onPress={() => handleKitchenStatus(a.orderId, "cancelled")}
+                                  >
+                                    <Text style={styles.actBtnRejectText}>Reject</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={[styles.actBtn, styles.actBtnAccept]}
+                                    onPress={() => handleKitchenStatus(a.orderId, "accepted")}
+                                  >
+                                    <Text style={styles.actBtnAcceptText}>Accept</Text>
+                                  </TouchableOpacity>
+                                </>
+                              ) : (
+                                <TouchableOpacity
+                                  style={[styles.actBtn, styles.actBtnServe]}
+                                  onPress={() => handleKitchenStatus(a.orderId, "served")}
+                                >
+                                  <Text style={styles.actBtnServeText}>Mark Served</Text>
+                                </TouchableOpacity>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {a.status === "open" ? (
+                                <>
+                                  <TouchableOpacity
+                                    style={[styles.actBtn, styles.actBtnReject]}
+                                    onPress={() => handleServiceStatus(a.serviceId, "done")}
+                                  >
+                                    <Text style={styles.actBtnRejectText}>Done</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={[styles.actBtn, styles.actBtnAccept]}
+                                    onPress={() => handleServiceStatus(a.serviceId, "attending")}
+                                  >
+                                    <Text style={styles.actBtnAcceptText}>Attend</Text>
+                                  </TouchableOpacity>
+                                </>
+                              ) : (
+                                <TouchableOpacity
+                                  style={[styles.actBtn, styles.actBtnServe]}
+                                  onPress={() => handleServiceStatus(a.serviceId, "done")}
+                                >
+                                  <Text style={styles.actBtnServeText}>Resolve</Text>
+                                </TouchableOpacity>
+                              )}
+                            </>
+                          )}
+                        </View>
+                      </View>
+                    ))
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══ MERGE MODAL ══ */}
+      <Modal
+        visible={mergeModalOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setMergeModalOpen(false)}
+      >
+        <View style={styles.centeredOverlay}>
+          <View style={styles.dialogBox}>
+            <Text style={styles.dialogTitle}>Merge Table</Text>
+            <Text style={{ marginBottom: 8, color: "#666" }}>
+              {(() => {
+                const src = tablesWithOrders.find((t) => t.id === mergeSource);
+                const label = src ? `T${src.number ?? getTableNumber(src) ?? src.id}` : mergeSource;
+                return `Merging ${label} into another occupied table`;
+              })()}
+            </Text>
+            {mergeError ? <Text style={{ color: "red", marginBottom: 10 }}>{mergeError}</Text> : null}
+            {mergeLoading ? (
+              <View style={{ padding: 24, alignItems: "center" }}>
+                <ActivityIndicator size="large" color={WaiterColors.primary} />
+                <Text style={{ marginTop: 10, color: "#6B7280" }}>Merging bills...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={tablesWithOrders.filter((t) => t.id !== mergeSource && t.status === "occupied")}
+                keyExtractor={(t) => t.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.dialogItem} onPress={() => handleMergeTable(item.id)}>
+                    <Text style={styles.dialogItemText}>
+                      T{item.number ?? getTableNumber(item) ?? item.id} - {item.total}
+                    </Text>
+                    <MaterialIcons name="arrow-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={{ paddingVertical: 16, alignItems: "center" }}>
+                    <Text style={{ color: "#9CA3AF" }}>No other occupied tables to merge with.</Text>
+                  </View>
+                }
+              />
+            )}
+            <TouchableOpacity
+              onPress={() => { if (!mergeLoading) { setMergeModalOpen(false); setMergeError(null); } }}
+              style={styles.dialogCloseBtn}
+            >
+              <Text style={{ color: "#FFF", fontWeight: "700" }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══ MOVE MODAL ══ */}
       <Modal
         visible={moveModalOpen}
         transparent
-        animationType="slide"
+        animationType="fade"
+        statusBarTranslucent
         onRequestClose={() => setMoveModalOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <WaiterText type="title">Move Table</WaiterText>
-              <TouchableOpacity onPress={() => setMoveModalOpen(false)}>
-                <Text style={{ fontSize: 18 }}>x</Text>
-              </TouchableOpacity>
-            </View>
-            <WaiterText style={{ marginBottom: 12 }}>
+        <View style={styles.centeredOverlay}>
+          <View style={styles.dialogBox}>
+            <Text style={styles.dialogTitle}>Move Table</Text>
+            <Text style={{ marginBottom: 8, color: "#666" }}>
               {(() => {
                 const src = tablesData.find((t) => t.id === moveSource);
-                const label = src
-                  ? `T${src.number ?? getTableNumber(src) ?? src.id}`
-                  : moveSource;
+                const label = src ? `T${src.number ?? getTableNumber(src) ?? src.id}` : moveSource;
                 return `Moving ${label} to another table`;
               })()}
-            </WaiterText>
-            {moveError ? (
-              <WaiterText style={{ color: "red", marginBottom: 8 }}>
-                {moveError}
-              </WaiterText>
-            ) : null}
-
+            </Text>
+            {moveError ? <Text style={{ color: "red", marginBottom: 10 }}>{moveError}</Text> : null}
             <FlatList
-              data={tablesWithOrders.filter(
-                (t) => t.id !== moveSource && t.status === "free",
-              )}
+              data={tablesWithOrders.filter((t) => t.id !== moveSource && t.status === "free")}
               keyExtractor={(t) => t.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.mergeRow}
+                  style={styles.dialogItem}
                   onPress={() => {
-                    if (!item.tableId) {
-                      setMoveError(
-                        "Target table id missing. Please refresh table data.",
-                      );
-                      return;
-                    }
+                    if (!item.tableId) { setMoveError("Target table id missing. Please refresh table data."); return; }
                     handleMoveTable(item.tableId);
                   }}
                   disabled={moveLoading}
                 >
-                  <View style={styles.tableThumbnail}>
-                    <Text>{`T${item.number ?? getTableNumber(item) ?? item.id}`}</Text>
-                  </View>
-                  <View style={styles.tableInfo}>
-                    <Text style={styles.amountText}>
-                      {`T${item.number ?? getTableNumber(item) ?? item.id}`}
-                    </Text>
-                    <Text style={styles.guestsText}>Free</Text>
-                  </View>
-                  <Text style={{ fontSize: 18 }}></Text>
+                  <Text style={styles.dialogItemText}>T{item.number ?? getTableNumber(item) ?? item.id} (Free)</Text>
+                  <MaterialIcons name="arrow-forward" size={20} color="#666" />
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <View style={styles.emptyMoveState}>
-                  <WaiterText>No empty tables available.</WaiterText>
+                <View style={{ paddingVertical: 16, alignItems: "center" }}>
+                  <Text style={{ color: "#9CA3AF" }}>No empty tables available.</Text>
                 </View>
               }
             />
+            <TouchableOpacity onPress={() => setMoveModalOpen(false)} style={styles.dialogCloseBtn}>
+              <Text style={{ color: "#FFF", fontWeight: "700" }}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Print modal */}
+      {/* ══ PRINT MODAL ══ */}
       <Modal
         visible={printModalOpen}
         transparent
-        animationType="slide"
+        animationType="fade"
+        statusBarTranslucent
         onRequestClose={() => setPrintModalOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <WaiterText type="title">Print Bill</WaiterText>
-              <TouchableOpacity onPress={() => setPrintModalOpen(false)}>
-                <Text style={{ fontSize: 18 }}>x</Text>
-              </TouchableOpacity>
-            </View>
-            {printSource
-              ? (() => {
-                  const table = tablesData.find((t) => t.id === printSource);
-                  return (
-                    <>
-                      <WaiterText style={{ marginBottom: 12 }}>
-                        {(() => {
-                          const label = table
-                            ? `T${table.number ?? getTableNumber(table) ?? table.id}`
-                            : printSource;
-                          return `Bill for ${label}`;
-                        })()}
-                      </WaiterText>
-                      <View style={{ marginBottom: 12 }}>
-                        <Text>Items: {table?.items ?? 0}</Text>
-                        <Text>Total: {table?.total ?? "-"}</Text>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.exportBtn}
-                        onPress={async () => {
-                          const t = tablesData.find(
-                            (x) => x.id === printSource,
-                          );
-                          if (!t) return;
-                          const csv = `Table,Items,Total\n${t.id},${t.items},${t.total}\n`;
-                          try {
-                            await Share.share({
-                              title: `Bill_${t.id}.csv`,
-                              message: csv,
-                            });
-                          } catch (e) {
-                            console.error(e);
-                          }
-                          setPrintModalOpen(false);
-                          setPrintSource(null);
-                        }}
-                      >
-                        <Text style={{ fontWeight: "700" }}>Export Bill</Text>
-                      </TouchableOpacity>
-                    </>
-                  );
-                })()
-              : null}
+        <View style={styles.centeredOverlay}>
+          <View style={styles.dialogBox}>
+            <Text style={styles.dialogTitle}>Print Bill</Text>
+            <Text style={{ marginBottom: 20, color: "#666" }}>Export bill for table?</Text>
+            <TouchableOpacity
+              style={[styles.dialogCloseBtn, { backgroundColor: WaiterColors.primary }]}
+              onPress={async () => {
+                const t = tablesData.find((x) => x.id === printSource);
+                if (t) {
+                  const csv = `Table,Items,Total\n${t.id},${t.items},${t.total}\n`;
+                  try { await Share.share({ title: `Bill_${t.id}.csv`, message: csv }); } catch {}
+                }
+                setPrintModalOpen(false);
+              }}
+            >
+              <Text style={{ color: "#FFF", fontWeight: "700" }}>Export CSV</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setPrintModalOpen(false)}
+              style={[styles.dialogCloseBtn, { marginTop: 10, backgroundColor: "#9CA3AF" }]}
+            >
+              <Text style={{ color: "#FFF", fontWeight: "700" }}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Mark as Paid modal */}
+      {/* ══ MARK AS PAID MODAL ══ */}
       <Modal
         visible={paidModalOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          if (!paidLoading) {
-            setPaidModalOpen(false);
-            setPaidSource(null);
-          }
-        }}
+        statusBarTranslucent
+        onRequestClose={() => { if (!paidLoading) { setPaidModalOpen(false); setPaidSource(null); } }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <WaiterText type="title">Mark as Paid</WaiterText>
+        <View style={styles.bottomSheetOverlay}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => { if (!paidLoading) { setPaidModalOpen(false); setPaidSource(null); } }}
+          />
+          <View style={styles.bottomSheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Mark as Paid</Text>
               <TouchableOpacity
-                onPress={() => {
-                  if (!paidLoading) {
-                    setPaidModalOpen(false);
-                    setPaidSource(null);
-                  }
-                }}
+                style={styles.closeBtn}
+                onPress={() => { if (!paidLoading) { setPaidModalOpen(false); setPaidSource(null); } }}
               >
-                <Text style={{ fontSize: 18 }}>✕</Text>
+                <MaterialIcons name="close" size={18} color="#6B7280" />
               </TouchableOpacity>
             </View>
+
             {(() => {
               const tbl = tablesWithOrders.find((t) => t.id === paidSource);
               const tblNumber = tbl ? getTableNumber(tbl) : undefined;
-              const bg =
-                tblNumber !== undefined ? billGroups.get(tblNumber) : undefined;
+              const bg = tblNumber !== undefined ? billGroups.get(tblNumber) : undefined;
               return (
                 <>
-                  <WaiterText style={{ marginBottom: 6 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: "#374151", marginBottom: 4 }}>
                     Table {tblNumber ? `T${tblNumber}` : paidSource}
-                  </WaiterText>
-                  {bg ? (
+                  </Text>
+                  {bg && (
                     <View style={[styles.mergedBadge, { marginBottom: 8 }]}>
                       <Text style={styles.mergedBadgeText}>
-                        🔗 Combined bill with T
-                        {bg.linkedTableNumbers
-                          .filter((n) => n !== tblNumber)
-                          .join(", T")}
+                        🔗 Combined bill with T{bg.linkedTableNumbers.filter((n) => n !== tblNumber).join(", T")}
                       </Text>
                     </View>
-                  ) : null}
-                  <WaiterText style={{ marginBottom: 4, color: "#6B7280" }}>
+                  )}
+                  <Text style={{ marginBottom: 4, color: "#6B7280" }}>
                     {tbl ? `${tbl.items} items • ${tbl.total}` : ""}
-                  </WaiterText>
+                  </Text>
                   {bg ? (
-                    <WaiterText
-                      style={{
-                        marginBottom: 16,
-                        color: "#4338CA",
-                        fontWeight: "600",
-                        fontSize: 12,
-                      }}
-                    >
-                      Paying will settle & free all{" "}
-                      {bg.linkedTableNumbers.length} tables
-                    </WaiterText>
+                    <Text style={{ marginBottom: 16, color: WaiterColors.primaryDark, fontWeight: "600", fontSize: 12 }}>
+                      Paying will settle & free all {bg.linkedTableNumbers.length} tables
+                    </Text>
                   ) : (
                     <View style={{ marginBottom: 16 }} />
                   )}
                 </>
               );
             })()}
+
             {paidLoading ? (
               <View style={{ padding: 24, alignItems: "center" }}>
                 <ActivityIndicator size="large" color={WaiterColors.primary} />
-                <WaiterText style={{ marginTop: 10 }}>
-                  Processing payment...
-                </WaiterText>
+                <Text style={{ marginTop: 10, color: "#6B7280" }}>Processing payment...</Text>
               </View>
             ) : (
               <View>
-                <WaiterText style={{ marginBottom: 12, fontWeight: "700" }}>
-                  Select Payment Mode
-                </WaiterText>
+                <Text style={{ marginBottom: 12, fontWeight: "700", color: "#111" }}>Select Payment Mode</Text>
                 {(["cash", "card", "upi"] as const).map((mode) => (
                   <TouchableOpacity
                     key={mode}
@@ -1646,27 +1773,21 @@ export default function CustomizeTables() {
                     onPress={() => handleMarkPaid(mode)}
                   >
                     <View style={styles.paymentModeIcon}>
-                      <Text style={{ fontSize: 20 }}>
-                        {mode === "cash" ? "💵" : mode === "card" ? "💳" : "📱"}
-                      </Text>
+                      <MaterialIcons
+                        name={mode === "cash" ? "payments" : mode === "card" ? "credit-card" : "phone-android"}
+                        size={22}
+                        color={WaiterColors.primary}
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.paymentModeLabel}>
-                        {mode === "cash"
-                          ? "Cash"
-                          : mode === "card"
-                            ? "Card"
-                            : "UPI"}
+                        {mode === "cash" ? "Cash" : mode === "card" ? "Card" : "UPI"}
                       </Text>
                       <Text style={styles.paymentModeSub}>
-                        {mode === "cash"
-                          ? "Pay with cash"
-                          : mode === "card"
-                            ? "Debit/Credit card"
-                            : "Google Pay, PhonePe, etc."}
+                        {mode === "cash" ? "Pay with cash" : mode === "card" ? "Debit/Credit card" : "Google Pay, PhonePe, etc."}
                       </Text>
                     </View>
-                    <Text style={{ fontSize: 16, color: "#9CA3AF" }}>→</Text>
+                    <MaterialIcons name="chevron-right" size={20} color="#9CA3AF" />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1674,497 +1795,571 @@ export default function CustomizeTables() {
           </View>
         </View>
       </Modal>
-
-      <View style={styles.section}>
-        <WaiterText type="subtitle">Activity Feed</WaiterText>
-
-        <View style={styles.activityTabsRow}>
-          <TouchableOpacity
-            style={[
-              styles.activityTab,
-              activityTab === "kitchen" ? styles.activityTabActive : null,
-            ]}
-            onPress={() => setActivityTab("kitchen")}
-          >
-            <Text
-              style={
-                activityTab === "kitchen"
-                  ? styles.activityTabTextActive
-                  : styles.activityTabText
-              }
-            >
-              Kitchen
-            </Text>
-            <View style={styles.activityBadge}>
-              <Text style={styles.activityBadgeText}>
-                {activities.filter(isKitchenVisible).length}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.activityTab,
-              activityTab === "service" ? styles.activityTabActive : null,
-            ]}
-            onPress={() => setActivityTab("service")}
-          >
-            <Text
-              style={
-                activityTab === "service"
-                  ? styles.activityTabTextActive
-                  : styles.activityTabText
-              }
-            >
-              Service
-            </Text>
-            <View style={styles.activityBadge}>
-              <Text style={styles.activityBadgeText}>
-                {activities.filter(isServiceVisible).length}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {activityLoading ? (
-          <WaiterText>Loading activity...</WaiterText>
-        ) : activityError ? (
-          <WaiterText style={{ color: "red" }}>{activityError}</WaiterText>
-        ) : (
-          activities
-            .filter((a) =>
-              activityTab === "kitchen"
-                ? isKitchenVisible(a)
-                : isServiceVisible(a),
-            )
-            .map((a) => (
-              <View key={a.id} style={styles.activityCard}>
-                <View style={styles.activityLeft}>
-                  <View style={styles.tableBadge}>
-                    <WaiterText>{a.table}</WaiterText>
-                  </View>
-                  <View style={{ marginLeft: 8 }}>
-                    <WaiterText type="defaultSemiBold">{a.title}</WaiterText>
-                    <WaiterText>{a.note}</WaiterText>
-                  </View>
-                </View>
-                <View style={styles.activityActions}>
-                  {a.channel === "kitchen" ? (
-                    <>
-                      {a.status === "pending" ? (
-                        <>
-                          <TouchableOpacity
-                            style={styles.acceptBtn}
-                            onPress={() =>
-                              handleKitchenStatus(a.orderId, "accepted")
-                            }
-                          >
-                            <Text style={{ color: "#0F766E" }}>Accept</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.rejectBtn}
-                            onPress={() =>
-                              handleKitchenStatus(a.orderId, "cancelled")
-                            }
-                          >
-                            <Text style={{ color: "#991B1B" }}>Reject</Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.acceptBtn}
-                          onPress={() =>
-                            handleKitchenStatus(a.orderId, "served")
-                          }
-                        >
-                          <Text style={{ color: "#0F766E" }}>Mark Served</Text>
-                        </TouchableOpacity>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {a.status === "open" ? (
-                        <>
-                          <TouchableOpacity
-                            style={styles.acceptBtn}
-                            onPress={() =>
-                              handleServiceStatus(a.serviceId, "attending")
-                            }
-                          >
-                            <Text style={{ color: "#0F766E" }}>Attend</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.rejectBtn}
-                            onPress={() =>
-                              handleServiceStatus(a.serviceId, "done")
-                            }
-                          >
-                            <Text style={{ color: "#991B1B" }}>Done</Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.acceptBtn}
-                          onPress={() =>
-                            handleServiceStatus(a.serviceId, "done")
-                          }
-                        >
-                          <Text style={{ color: "#0F766E" }}>
-                            Mark Resolved
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </>
-                  )}
-                </View>
-              </View>
-            ))
-        )}
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
+/* ══════════════════════════════════════════════════════
+   STYLES
+   ══════════════════════════════════════════════════════ */
+
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 12,
-    paddingBottom: 32,
-    backgroundColor: "#F8FAFB",
+  mainContainer: {
+    flex: 1,
+    backgroundColor: WaiterColors.background,
   },
-  headerRow: {
+
+  /* ── HEADER ── */
+  headerTopRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    marginBottom: 10,
+    flex: 1,
   },
-  headerRight: { alignItems: "flex-end" },
+  headerCenter: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: -0.3,
+  },
+  headerLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  headerLocation: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: "600",
+    marginLeft: 2,
+  },
+  bellBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  bellBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: "#FFF",
+  },
+  bellBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#FFF",
+  },
+
+  /* ── SCROLL BODY ── */
+  scrollBody: { flex: 1 },
+  scrollContent: { paddingTop: 8, paddingBottom: 80 },
+
+  /* ── METRICS ── */
   metricsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
-    marginTop: 10,
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
   metricCard: {
-    flex: 1,
-    marginRight: 8,
-    padding: 12,
+    width: "23%",
+    backgroundColor: "#FFF",
     borderRadius: 14,
-    backgroundColor: "#FFFFFF",
+    paddingVertical: 14,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   metricIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  metricPendingBg: { backgroundColor: "#F8FAFC" },
-  metricBillBg: { backgroundColor: "#EEF6FF" },
-  metricServiceBg: { backgroundColor: "#EFF6FF" },
-  metricLongBg: { backgroundColor: "#FFF5F6" },
-  controlsRow: { marginBottom: 12 },
-  filtersRow: { flexDirection: "row", marginBottom: 8 },
-  filterBtn: {
-    paddingVertical: 8,
+  metricNum: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#111",
+    marginBottom: 2,
+  },
+  metricLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#9CA3AF",
+  },
+
+  /* ── SEARCH ── */
+  searchBarWrap: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    marginTop: -10,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0FDF4",
+    borderRadius: 12,
     paddingHorizontal: 14,
-    borderRadius: 20,
-    marginRight: 8,
-    backgroundColor: "#FFFFFF",
+    height: 46,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: WaiterColors.border,
   },
-  filterActive: {
+  searchInput: {
+    flex: 1,
+    height: "100%",
+    marginLeft: 10,
+    fontSize: 14,
+    color: WaiterColors.text,
+    fontWeight: "500",
+  },
+  searchTuneBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#FFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
+  },
+
+  /* ── SORT ── */
+  sortMenu: {
+    marginHorizontal: 16,
+    backgroundColor: "#FFF",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 14,
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
+  },
+  sortMenuLabel: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    fontWeight: "700",
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  sortOptions: { flexDirection: "row", gap: 8 },
+  sortOption: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+  },
+  sortOptionActive: { backgroundColor: "#DCFCE7" },
+  sortOptionText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
+  sortOptionTextActive: { color: WaiterColors.primaryDark, fontWeight: "800" },
+
+  /* ── FILTERS ── */
+  filtersScroll: { marginBottom: 14 },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
+    marginRight: 8,
+  },
+  filterChipActive: {
     backgroundColor: WaiterColors.primary,
     borderColor: WaiterColors.primary,
   },
-  filterText: { color: "#64748B", fontWeight: "600" },
-  filterTextActive: { color: "#FFFFFF", fontWeight: "700" },
-  searchInput: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
-    elevation: 1,
+  filterChipText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
+  filterChipTextActive: { color: "#FFF", fontWeight: "700" },
+
+  /* ── TABLE GRID ── */
+  tablesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
   },
   tableCard: {
     width: "48%",
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    marginBottom: 12,
-    position: "relative",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  tableFree: {
-    backgroundColor: "#fff",
-  },
-  tableBill: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#38BDF8",
-    backgroundColor: "#F0FAFF",
-  },
-  tableLong: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#F87171",
-    backgroundColor: "#FFF5F5",
-  },
-
-  tableStats: { marginTop: 8, alignItems: "flex-end" },
-  tableMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 6,
-  },
-  tableMetaText: { color: "#64748B", fontWeight: "600" },
-  tableMetaTextMuted: { color: "#cbd5e1", fontWeight: "600" },
-  itemsBox: {
-    backgroundColor: "#F3F4F6",
-    padding: 6,
-    borderRadius: 8,
-    marginBottom: 6,
-    alignItems: "center",
-  },
-  section: { marginTop: 12 },
-  activityCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    marginTop: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  activityLeft: { flexDirection: "row", alignItems: "center" },
-  tableBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  activityActions: { flexDirection: "row" },
-  acceptBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#ECFDF5",
-    marginRight: 8,
-  },
-  rejectBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#FFF1F2",
-  },
-  optionsBtn: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    zIndex: 20,
-    padding: 6,
-    borderRadius: 8,
-  },
-  optionsMenu: {
-    position: "absolute",
-    top: 40,
-    right: 8,
-    width: 160,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingVertical: 6,
-    zIndex: 30,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  optionsItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  optionsItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  optionsItemText: {
-    color: WaiterColors.text,
-    fontWeight: "600",
-  },
-  optionsItemTextSuccess: {
-    color: "#16a34a",
-    fontWeight: "700",
-  },
-  sortBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#FFFFFF",
-    marginLeft: 8,
-  },
-  sortMenu: {
-    position: "absolute",
-    top: 44,
-    right: 0,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    paddingVertical: 6,
-    width: 160,
-    zIndex: 9999,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 16,
-  },
-  sortItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-  },
-  modalContent: {
-    width: "100%",
-    maxHeight: "80%",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF",
     borderRadius: 16,
     padding: 16,
+    marginBottom: 14,
+    borderWidth: 1.2,
+    borderColor: "#F0F0F0",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  modalHeader: {
+  tableCardFree: {
+    opacity: 0.55,
+    backgroundColor: "#FAFAFA",
+    borderStyle: "dashed" as any,
+    borderColor: "#D5D5D5",
+  },
+  tableCardOccupied: {
+    borderColor: "#86EFAC",
+    backgroundColor: "#F0FDF4",
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.12,
+    elevation: 4,
+  },
+  tableCardBill: {
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+  },
+  tableCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 10,
   },
-  mergeRow: {
+  tableNumber: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#1F2937",
+    letterSpacing: -0.3,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase" as any,
+  },
+  mergedBadge: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 6,
+    alignSelf: "flex-start",
+  },
+  mergedBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: WaiterColors.primaryDark,
+  },
+  tableInfoSection: { marginTop: 4 },
+  infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: "#F8FAFB",
-    marginBottom: 8,
+    marginBottom: 6,
+    gap: 6,
   },
-  emptyMoveState: {
-    paddingVertical: 16,
+  infoText: {
+    fontSize: 13,
+    color: "#4B5563",
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: "rgba(0,0,0,0.05)",
+    marginVertical: 10,
+  },
+  totalAmount: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111",
+    marginTop: 4,
+  },
+  emptyStateContainer: {
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    opacity: 0.6,
   },
-  tableThumbnail: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
+  availableText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#9CA3AF",
+    fontWeight: "600",
+  },
+
+  /* ── BOTTOM SHEET ── */
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "flex-end",
+  },
+  bottomSheet: {
+    backgroundColor: "#F9FAFB",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 34,
+    maxHeight: "85%",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 25,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  sheetTitle: { fontSize: 20, fontWeight: "800", color: "#111" },
+  sheetSubtitle: { fontSize: 13, color: "#6B7280", fontWeight: "500", marginTop: 2 },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
   },
-  tableInfo: { flex: 1 },
-  amountText: { fontWeight: "700" },
-  guestsText: { color: "#6B7280", marginTop: 2 },
-  exportBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    backgroundColor: WaiterColors.primary,
-  },
-  activityTabsRow: { flexDirection: "row", marginVertical: 12 },
-  activityTab: {
+
+  /* ── ACTION SUMMARY ── */
+  statusCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#F1F5F9",
-    marginRight: 8,
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  activityTabActive: { backgroundColor: "#FFFFFF" },
-  activityTabText: { color: "#6B7280", marginRight: 8 },
-  activityTabTextActive: {
-    color: "#111827",
-    marginRight: 8,
+  statusMain: { flex: 1 },
+  statusLabel: { fontSize: 12, color: "#6B7280", fontWeight: "600", marginBottom: 4 },
+  statusValue: { fontSize: 24, fontWeight: "800", color: "#111", letterSpacing: -0.5 },
+  verticalDivider: { width: 1, height: "80%", backgroundColor: WaiterColors.border, marginHorizontal: 16 },
+  statusDetails: { justifyContent: "center", gap: 8 },
+  statusDetailRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  statusDetailText: { fontSize: 13, fontWeight: "600", color: "#4B5563" },
+  sectionLabel: {
+    fontSize: 13,
     fontWeight: "700",
+    color: "#9CA3AF",
+    marginBottom: 10,
+    textTransform: "uppercase" as any,
+    letterSpacing: 0.5,
   },
-  activityBadge: {
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 10,
+  },
+  actionBtnStyle: {
+    width: "48%",
+    backgroundColor: "#FFF",
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  actionBtnOrder: {
+    backgroundColor: "#F0FDF4",
+    borderColor: WaiterColors.border,
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.15,
+    elevation: 4,
+  },
+  actionBtnOrderText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: "700",
+    color: WaiterColors.primaryDark,
+  },
+  actionBtnPrimary: {
+    backgroundColor: "#DCFCE7",
+    borderColor: WaiterColors.border,
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.15,
+    elevation: 4,
+  },
+  actionBtnPrimaryText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: "700",
+    color: WaiterColors.primaryDark,
+  },
+  actionBtnStyleText: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  dangerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    backgroundColor: "#FEF2F2",
+  },
+  dangerBtnText: { fontSize: 14, fontWeight: "700", color: "#EF4444", marginLeft: 8 },
+
+  /* ── ACTIVITY MODAL ── */
+  modalTabsRow: {
+    flexDirection: "row",
+    backgroundColor: "#E5E7EB",
     borderRadius: 12,
+    padding: 4,
+    marginBottom: 14,
   },
-  activityBadgeText: { fontSize: 12, color: "#374151" },
+  modalTabBtn: { flex: 1, paddingVertical: 8, alignItems: "center", borderRadius: 10 },
+  modalTabBtnActive: {
+    backgroundColor: "#FFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modalTabLabel: { fontWeight: "600", color: "#6B7280", fontSize: 14 },
+  modalTabLabelActive: { color: WaiterColors.primaryDark, fontWeight: "700" },
+  emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 60 },
+  activityCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: WaiterColors.border,
+  },
+  activityCardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  activityBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activityBadgeText: { fontWeight: "800", color: WaiterColors.primaryDark, fontSize: 14 },
+  activityTitle: { fontSize: 15, fontWeight: "700", color: "#333" },
+  activityNote: { fontSize: 12, color: "#999", marginTop: 1 },
+  statusChip: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: WaiterColors.primaryDark,
+    textTransform: "capitalize" as any,
+  },
+  activityActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
+  actBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, minWidth: 80, alignItems: "center" },
+  actBtnReject: { backgroundColor: "#FEF2F2" },
+  actBtnRejectText: { color: "#DC2626", fontWeight: "700", fontSize: 13 },
+  actBtnAccept: { backgroundColor: "#DCFCE7" },
+  actBtnAcceptText: { color: WaiterColors.primaryDark, fontWeight: "700", fontSize: 13 },
+  actBtnServe: { backgroundColor: "#EFF6FF" },
+  actBtnServeText: { color: "#2563EB", fontWeight: "700", fontSize: 13 },
+
+  /* ── CENTERED DIALOGS ── */
+  centeredOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  dialogBox: {
+    width: "100%",
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  dialogTitle: { fontSize: 20, fontWeight: "800", color: "#111", marginBottom: 8 },
+  dialogItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  dialogItemText: { fontSize: 16, color: "#333", fontWeight: "500" },
+  dialogCloseBtn: {
+    marginTop: 20,
+    backgroundColor: WaiterColors.primaryDark,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+
+  /* ── PAYMENT MODE ── */
   paymentModeBtn: {
     flexDirection: "row",
     alignItems: "center",
     padding: 14,
     borderRadius: 12,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFF",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: WaiterColors.border,
     marginBottom: 10,
   },
   paymentModeIcon: {
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: "#fff",
+    backgroundColor: "#DCFCE7",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: WaiterColors.border,
   },
-  paymentModeLabel: {
-    fontWeight: "700",
-    fontSize: 15,
-    color: "#111827",
-  },
-  paymentModeSub: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 2,
-  },
-  mergedBadge: {
-    backgroundColor: "#EEF2FF",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 4,
-    marginBottom: 2,
-    alignSelf: "flex-start",
-  },
-  mergedBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#4338CA",
-  },
+  paymentModeLabel: { fontWeight: "700", fontSize: 15, color: "#111827" },
+  paymentModeSub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
 });

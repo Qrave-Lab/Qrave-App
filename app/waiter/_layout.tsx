@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { HapticTab } from "../../components/haptic-tab";
 import { WaiterColors } from "../../constants/theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
   "customize-tables": { icon: "table-restaurant", label: "Floor" },
@@ -21,10 +22,11 @@ const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
 };
 
 function WaiterTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
   const visibleTabs = ["customize-tables", "waitlist", "menu", "profile"];
 
   return (
-    <View style={styles.tabBarContainer}>
+    <View style={[styles.tabBarContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       {state.routes
         .filter((route) => visibleTabs.includes(route.name))
         .map((route) => {
@@ -139,37 +141,39 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
-    paddingBottom: Platform.OS === "ios" ? 20 : 8,
-    paddingTop: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -3 },
-    elevation: 8,
+    borderTopColor: "#D1FAE5",
+    paddingTop: 10,
+    shadowColor: "#16A34A",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 12,
   },
   tabItem: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 2,
+    paddingVertical: 4,
   },
   tabIconWrap: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 12,
     marginBottom: 2,
   },
-  tabIconWrapActive: {},
+  tabIconWrapActive: {
+    backgroundColor: "#DCFCE7",
+  },
   tabLabel: {
     fontSize: 11,
-    fontWeight: "500",
+    fontWeight: "600",
     color: "#9CA3AF",
     marginTop: 1,
   },
   tabLabelActive: {
-    color: "#1F2937",
-    fontWeight: "700",
+    color: WaiterColors.primary,
+    fontWeight: "800",
   },
 });

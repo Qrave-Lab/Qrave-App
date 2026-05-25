@@ -3,29 +3,19 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
   Platform,
-  StatusBar,
   useWindowDimensions,
 } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
+import KitchenWavyHeader from "../../components/KitchenWavyHeader";
+import { KitchenColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
-
-/* ── Kitchen brand colors ─── */
-const K = {
-  bg: "#FAFAF9",
-  headerFrom: "#F59E0B",
-  headerTo: "#D97706",
-  accent: "#F59E0B",
-  text: "#1C1917",
-  muted: "#78716C",
-  cardBg: "#FFFFFF",
-};
 
 type OrderItem = {
   menu_item_name?: string;
@@ -47,168 +37,48 @@ type ActiveOrdersResponse = {
   orders: ActiveOrder[];
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.bg },
-  /* ── wavy header ── */
-  headerWrap: {
-    width: "100%",
-    overflow: "hidden",
-    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 0,
-    marginBottom: -2,
-  },
-  headerContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingBottom: 18,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    color: "rgba(255,255,255,0.85)",
-    fontWeight: "600",
-    marginTop: 2,
-    fontSize: 13,
-  },
-  logoutBtn: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  logoutText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  /* ── stat chips ── */
-  statsRow: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 6,
-    gap: 10,
-  },
-  statChip: {
-    flex: 1,
-    backgroundColor: K.cardBg,
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  statValue: { fontSize: 22, fontWeight: "900", color: K.text },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: K.muted,
-    marginTop: 2,
-    textTransform: "uppercase",
-  },
-  /* ── cards ── */
-  card: {
-    backgroundColor: K.cardBg,
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  tableTitle: { fontSize: 16, fontWeight: "800", color: K.text },
-  orderIdText: { fontSize: 12, color: K.muted, fontWeight: "600" },
-  elapsedBadge: {
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  elapsedText: { fontSize: 11, fontWeight: "700", color: "#92400E" },
-  divider: { height: 1, backgroundColor: "#F5F5F4", marginVertical: 6 },
-  itemRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 5,
-  },
-  itemName: { color: K.text, fontWeight: "600", fontSize: 14, flex: 1 },
-  itemQty: { color: K.accent, fontWeight: "800", fontSize: 14, marginLeft: 8 },
-  /* ── empty / loading ── */
-  loadingBox: { alignItems: "center", paddingTop: 40 },
-  loadingText: { marginTop: 8, color: K.muted },
-  emptyText: {
-    color: K.muted,
-    textAlign: "center",
-    marginTop: 40,
-    fontSize: 15,
-  },
-});
+/** Returns elapsed label and urgency level */
+function getElapsedInfo(createdAt?: string, nowTs = Date.now()) {
+  if (!createdAt) return { label: "—", urgency: "normal" as const };
+  const start = new Date(createdAt).getTime();
+  if (Number.isNaN(start)) return { label: "—", urgency: "normal" as const };
+  const diffMin = Math.max(0, Math.floor((nowTs - start) / 60000));
+  const hours = Math.floor(diffMin / 60);
+  const mins = diffMin % 60;
+  const label =
+    hours > 0
+      ? `${hours}h ${String(mins).padStart(2, "0")}m`
+      : `${mins}m`;
+  const urgency =
+    diffMin >= 30 ? "critical" : diffMin >= 15 ? "warning" : "normal";
+  return { label, urgency } as const;
+}
 
 export default function KitchenScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isTablet = width > 700;
+
   const [orders, setOrders] = useState<ActiveOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [nowTs, setNowTs] = useState(() => Date.now());
 
+  /* Live clock — updates every 30 s */
   useEffect(() => {
     const timer = setInterval(() => setNowTs(Date.now()), 30000);
     return () => clearInterval(timer);
   }, []);
 
-  const getElapsedLabel = useCallback(
-    (createdAt?: string) => {
-      if (!createdAt) return "Elapsed: -";
-      const start = new Date(createdAt).getTime();
-      if (Number.isNaN(start)) return "Elapsed: -";
-      const diffMin = Math.max(0, Math.floor((nowTs - start) / 60000));
-      const hours = Math.floor(diffMin / 60);
-      const mins = diffMin % 60;
-      if (hours > 0)
-        return `Elapsed: ${hours}h ${String(mins).padStart(2, "0")}m`;
-      return `Elapsed: ${mins}m`;
-    },
-    [nowTs],
-  );
-
   const checkAuth = useCallback(async () => {
     const user = await AsyncStorage.getItem("user");
-    if (!user) {
-      router.replace("/");
-      return false;
-    }
+    if (!user) { router.replace("/"); return false; }
     try {
       const parsed = JSON.parse(user);
       const role = parsed?.role;
-      const isKitchen = role === "kitchen" || role === "chef";
-      const isAdmin = role === "owner" || role === "manager";
-      const isWaiter = role === "waiter";
-      if (isAdmin) {
-        router.replace("/admin/customize-tables");
-        return false;
-      }
-      if (isWaiter) {
-        router.replace("/waiter");
-        return false;
-      }
-      if (!isKitchen) {
-        router.replace("/setup");
-        return false;
-      }
+      if (role === "owner" || role === "manager") { router.replace("/admin/customize-tables"); return false; }
+      if (role === "waiter") { router.replace("/waiter"); return false; }
+      if (role !== "kitchen" && role !== "chef") { router.replace("/setup"); return false; }
       return true;
     } catch {
       router.replace("/");
@@ -230,9 +100,7 @@ export default function KitchenScreen() {
     }
   }, [checkAuth]);
 
-  useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+  useEffect(() => { loadOrders(); }, [loadOrders]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -245,140 +113,301 @@ export default function KitchenScreen() {
     [orders],
   );
 
+  const totalItems = useMemo(
+    () => acceptedOrders.reduce((sum, o) => sum + (o.items?.length || 0), 0),
+    [acceptedOrders],
+  );
+
   const logout = useCallback(async () => {
-    try {
-      await AsyncStorage.removeItem("user");
-    } catch {}
+    try { await AsyncStorage.removeItem("user"); } catch {}
     router.replace("/");
   }, [router]);
 
-  const { width: screenW } = useWindowDimensions();
-  const HEADER_H = 150;
-  const curveH = HEADER_H * 0.85;
-  const gIds = useMemo(
-    () => ({
-      a: `kh_a_${Math.random().toString(36).slice(2, 9)}`,
-      b: `kh_b_${Math.random().toString(36).slice(2, 9)}`,
-      c: `kh_c_${Math.random().toString(36).slice(2, 9)}`,
-    }),
-    [],
-  );
-
   return (
-    <View style={styles.container}>
-      {/* ── Wavy Header ── */}
-      <View style={[styles.headerWrap, { height: HEADER_H }]}>
-        <View style={StyleSheet.absoluteFill}>
-          <Svg
-            height="100%"
-            width="100%"
-            viewBox={`0 0 ${screenW} ${HEADER_H}`}
-            preserveAspectRatio="none"
-          >
-            <Defs>
-              <LinearGradient id={gIds.a} x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor="#FDE68A" stopOpacity="0.4" />
-                <Stop offset="1" stopColor="#FCD34D" stopOpacity="0.3" />
-              </LinearGradient>
-              <LinearGradient id={gIds.b} x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor="#FBBF24" stopOpacity="0.5" />
-                <Stop offset="1" stopColor="#F59E0B" stopOpacity="0.4" />
-              </LinearGradient>
-              <LinearGradient id={gIds.c} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={K.headerFrom} stopOpacity="1" />
-                <Stop offset="1" stopColor={K.headerTo} stopOpacity="1" />
-              </LinearGradient>
-            </Defs>
-            <Path
-              d={`M0,0 L${screenW},0 L${screenW},${curveH * 0.7} C${screenW * 0.6},${curveH * 0.9} ${screenW * 0.3},${curveH * 0.5} 0,${curveH * 0.8} Z`}
-              fill={`url(#${gIds.a})`}
-            />
-            <Path
-              d={`M0,0 L${screenW},0 L${screenW},${curveH * 0.55} C${screenW * 0.7},${curveH * 0.75} ${screenW * 0.4},${curveH * 0.4} 0,${curveH * 0.65} Z`}
-              fill={`url(#${gIds.b})`}
-            />
-            <Path
-              d={`M0,0 L${screenW},0 L${screenW},${HEADER_H * 0.85} C${screenW * 0.75},${HEADER_H} ${screenW * 0.25},${HEADER_H * 0.75} 0,${HEADER_H} Z`}
-              fill={`url(#${gIds.c})`}
-            />
-          </Svg>
-        </View>
-        <View style={styles.headerContent}>
+    <View style={s.container}>
+      <KitchenWavyHeader height={140}>
+        <View style={s.headerContent}>
           <View>
-            <Text style={styles.title}>Kitchen</Text>
-            <Text style={styles.subtitle}>Accepted orders</Text>
+            <Text style={s.headerTitle}>Kitchen Display</Text>
+            <Text style={s.headerSubtitle}>Live Order Queue</Text>
           </View>
-          <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-            <Text style={styles.logoutText}>Logout</Text>
+          <TouchableOpacity style={s.logoutBtn} onPress={logout} activeOpacity={0.8}>
+            <MaterialIcons name="logout" size={16} color="#FFFFFF" />
+            <Text style={s.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </KitchenWavyHeader>
 
-      {/* ── Stats chips ── */}
-      <View style={styles.statsRow}>
-        <View style={styles.statChip}>
-          <Text style={styles.statValue}>{acceptedOrders.length}</Text>
-          <Text style={styles.statLabel}>Active</Text>
-        </View>
-        <View style={styles.statChip}>
-          <Text style={styles.statValue}>
-            {acceptedOrders.reduce((sum, o) => sum + (o.items?.length || 0), 0)}
-          </Text>
-          <Text style={styles.statLabel}>Items</Text>
-        </View>
-      </View>
-
-      {loading ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="small" color={K.accent} />
-          <Text style={styles.loadingText}>Loading orders...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={acceptedOrders}
-          keyExtractor={(item) => String(item.id || item.order_id)}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={K.accent}
-            />
-          }
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No accepted orders right now.</Text>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.tableTitle}>
-                    Table {item.table_number ?? "-"}
-                  </Text>
-                  <Text style={styles.orderIdText}>
-                    Order #{item.id || item.order_id}
-                  </Text>
-                </View>
-                <View style={styles.elapsedBadge}>
-                  <Text style={styles.elapsedText}>
-                    {getElapsedLabel(item.created_at)}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.divider} />
-              {(item.items || []).map((it, idx) => (
-                <View key={`${item.id}-${idx}`} style={styles.itemRow}>
-                  <Text style={styles.itemName} numberOfLines={1}>
-                    {it.menu_item_name || "Item"}
-                    {it.variant_label ? ` (${it.variant_label})` : ""}
-                  </Text>
-                  <Text style={styles.itemQty}>x{it.quantity || 0}</Text>
-                </View>
-              ))}
+      <ScrollView
+        contentContainerStyle={s.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={KitchenColors.primary} />}
+      >
+        {/* ── Stats Dashboard ── */}
+        <View style={s.statsRow}>
+          <View style={[s.statCard, s.statCardOrange]}>
+            <View style={[s.statIconBox, { backgroundColor: "#FFEDD5" }]}>
+              <MaterialIcons name="receipt-long" size={24} color="#C2410C" />
             </View>
-          )}
-          contentContainerStyle={{ paddingTop: 6, paddingBottom: 16 }}
-        />
-      )}
+            <View>
+              <Text style={s.statValue}>{acceptedOrders.length}</Text>
+              <Text style={s.statLabel}>Active Orders</Text>
+            </View>
+          </View>
+
+          <View style={[s.statCard, s.statCardAmber]}>
+            <View style={[s.statIconBox, { backgroundColor: "#FEF3C7" }]}>
+              <MaterialIcons name="restaurant-menu" size={24} color="#B45309" />
+            </View>
+            <View>
+              <Text style={s.statValue}>{totalItems}</Text>
+              <Text style={s.statLabel}>Total Items</Text>
+            </View>
+          </View>
+
+          <View style={[s.statCard, s.statCardRed]}>
+            <View style={[s.statIconBox, { backgroundColor: "#FEE2E2" }]}>
+              <MaterialIcons name="timer" size={24} color="#B91C1C" />
+            </View>
+            <View>
+              <Text style={s.statValue}>
+                {acceptedOrders.filter((o) => getElapsedInfo(o.created_at, nowTs).urgency !== "normal").length}
+              </Text>
+              <Text style={s.statLabel}>Urgent Orders</Text>
+            </View>
+          </View>
+        </View>
+
+        {loading ? (
+          <View style={s.loadingBox}>
+            <ActivityIndicator size="large" color={KitchenColors.primary} />
+            <Text style={s.loadingText}>Syncing orders...</Text>
+          </View>
+        ) : acceptedOrders.length === 0 ? (
+          <View style={s.emptyBox}>
+            <View style={s.emptyIconWrap}>
+              <MaterialIcons name="check-circle" size={48} color="#10B981" />
+            </View>
+            <Text style={s.emptyTitle}>All caught up!</Text>
+            <Text style={s.emptyHint}>No active orders in the queue.</Text>
+          </View>
+        ) : (
+          <View style={[s.grid, isTablet && s.gridTablet]}>
+            {acceptedOrders.map((item) => {
+              const { label: elapsedLabel, urgency } = getElapsedInfo(item.created_at, nowTs);
+              const isCritical = urgency === "critical";
+              const isWarning = urgency === "warning";
+
+              return (
+                <View
+                  key={item.id}
+                  style={[
+                    s.ticketCard,
+                    isTablet && s.ticketCardTablet,
+                    isCritical && s.ticketCritical,
+                    isWarning && s.ticketWarning,
+                  ]}
+                >
+                  {/* Ticket Header */}
+                  <View style={[
+                    s.ticketHeader,
+                    isCritical && s.headerCritical,
+                    isWarning && s.headerWarning,
+                  ]}>
+                    <View style={s.tableBadge}>
+                      <Text style={s.tableBadgeText}>Table {item.table_number ?? "—"}</Text>
+                    </View>
+                    <View style={s.timeBadge}>
+                      <MaterialIcons
+                        name="schedule"
+                        size={14}
+                        color={isCritical ? "#FFFFFF" : isWarning ? "#B45309" : "#475569"}
+                      />
+                      <Text style={[
+                        s.timeText,
+                        isCritical && s.timeTextCritical,
+                        isWarning && s.timeTextWarning,
+                      ]}>
+                        {elapsedLabel}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={s.ticketBody}>
+                    <Text style={s.orderId}>Order #{String(item.id || item.order_id || "—").slice(0, 8)}</Text>
+                    
+                    <View style={s.itemsList}>
+                      {(item.items || []).map((it, idx) => (
+                        <View key={`${item.id}-${idx}`} style={s.itemRow}>
+                          <View style={s.itemQtyBox}>
+                            <Text style={s.itemQtyText}>{it.quantity || 0}</Text>
+                          </View>
+                          <View style={s.itemDetails}>
+                            <Text style={s.itemName}>{it.menu_item_name || "Unknown Item"}</Text>
+                            {it.variant_label ? (
+                              <Text style={s.itemVariant}>{it.variant_label}</Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Ticket Footer */}
+                  <View style={s.ticketFooter}>
+                    <MaterialIcons name="restaurant" size={14} color="#94A3B8" />
+                    <Text style={s.footerText}>
+                      {item.items?.length || 0} item{(item.items?.length || 0) !== 1 ? "s" : ""} total
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: KitchenColors.background },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 8,
+  },
+  headerTitle: { fontSize: 24, fontWeight: "900", color: "#FFFFFF", letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: "600", marginTop: 2 },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  logoutText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", marginLeft: 6 },
+  
+  scrollContent: { padding: 16, paddingBottom: 40 },
+  
+  statsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 20,
+    flexWrap: "wrap",
+    marginTop: -30,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 100,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: KitchenColors.border,
+    shadowColor: KitchenColors.primary,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  statIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  statValue: { fontSize: 22, fontWeight: "900", color: "#0F172A", letterSpacing: -0.5 },
+  statLabel: { fontSize: 12, fontWeight: "700", color: "#64748B", textTransform: "uppercase", marginTop: 2 },
+  statCardOrange: { borderColor: "#FFEDD5" },
+  statCardAmber: { borderColor: "#FEF3C7" },
+  statCardRed: { borderColor: "#FEE2E2" },
+
+  loadingBox: { alignItems: "center", justifyContent: "center", paddingVertical: 60 },
+  loadingText: { marginTop: 12, color: "#64748B", fontWeight: "700", fontSize: 15 },
+  
+  emptyBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 80,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderStyle: "dashed",
+  },
+  emptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  emptyTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A", marginBottom: 8 },
+  emptyHint: { fontSize: 14, color: "#64748B", fontWeight: "500" },
+
+  grid: { flexDirection: "column", gap: 16 },
+  gridTablet: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start" },
+  
+  ticketCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  ticketCardTablet: { width: Platform.select({ web: "32%", default: "48%" }), minWidth: 300 },
+  ticketCritical: { borderColor: "#EF4444", borderWidth: 2, shadowColor: "#EF4444", shadowOpacity: 0.2 },
+  ticketWarning: { borderColor: "#F59E0B", borderWidth: 2, shadowColor: "#F59E0B", shadowOpacity: 0.1 },
+
+  ticketHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#F8FAFC",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  headerCritical: { backgroundColor: "#FEF2F2", borderBottomColor: "#FCA5A5" },
+  headerWarning: { backgroundColor: "#FFFBEB", borderBottomColor: "#FCD34D" },
+  
+  tableBadge: { backgroundColor: "#0F172A", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  tableBadgeText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  
+  timeBadge: { flexDirection: "row", alignItems: "center", gap: 6 },
+  timeText: { fontSize: 15, fontWeight: "800", color: "#475569" },
+  timeTextCritical: { color: "#EF4444" },
+  timeTextWarning: { color: "#D97706" },
+
+  ticketBody: { padding: 16 },
+  orderId: { fontSize: 12, fontWeight: "700", color: "#94A3B8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 },
+  
+  itemsList: { gap: 12 },
+  itemRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  itemQtyBox: {
+    backgroundColor: KitchenColors.primaryDark,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  itemQtyText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  itemDetails: { flex: 1 },
+  itemName: { fontSize: 18, fontWeight: "800", color: "#0F172A", lineHeight: 24 },
+  itemVariant: { fontSize: 14, fontWeight: "600", color: "#64748B", marginTop: 2 },
+  
+  ticketFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#F8FAFC",
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  footerText: { fontSize: 12, fontWeight: "700", color: "#64748B" },
+});

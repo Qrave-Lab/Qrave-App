@@ -15,6 +15,8 @@ import {
     View,
 } from "react-native";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
   "customize-tables": { icon: "table-restaurant", label: "Floor" },
   inventory: { icon: "inventory", label: "Menu" },
@@ -23,10 +25,11 @@ const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
 };
 
 function AdminTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
   const visibleTabs = ["customize-tables", "inventory", "takeaway", "sales"];
 
   return (
-    <View style={styles.tabBarContainer}>
+    <View style={[styles.tabBarContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       {state.routes
         .filter((route) => visibleTabs.includes(route.name))
         .map((route) => {
@@ -196,7 +199,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
     borderTopColor: "#F0F0F0",
-    paddingBottom: Platform.OS === "ios" ? 20 : 8,
     paddingTop: 8,
     shadowColor: "#000",
     shadowOpacity: 0.06,

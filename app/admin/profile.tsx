@@ -19,7 +19,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
 import { AdminColors } from "../../constants/theme";
-import apiClient, { persistAuthFromResponse } from "../../lib/apiClient";
+import apiClient, { persistAuthFromResponse, BASE_URL } from "../../lib/apiClient";
 import iconPng from "../../assets/images/icon.png";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
@@ -245,7 +245,7 @@ export default function AdminProfile() {
         const rid = me?.restaurant_id || me?.data?.restaurant_id;
         if (!rid) return;
         const res = await fetch(
-          `https://qrave-backend.onrender.com/public/restaurants/${rid}/logo`,
+          `${BASE_URL}/public/restaurants/${rid}/logo`,
         );
         const data = await res.json();
         if (data.logo_url) {

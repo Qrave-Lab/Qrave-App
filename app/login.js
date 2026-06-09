@@ -30,6 +30,7 @@ import {
     api,
     login as apiLogin,
     persistAuthFromResponse,
+    BASE_URL,
 } from "../lib/apiClient";
 import { syncBackendSessionForGoogleUser } from "../lib/googleBackendBridge";
 import { clearSupabasePkceState, supabase } from "../lib/supabaseClient";
@@ -37,7 +38,6 @@ import { clearSupabasePkceState, supabase } from "../lib/supabaseClient";
 const { width, height } = Dimensions.get("window");
 const THEME_COLOR = "#F4B400";
 const THEME_DARK = "#E5A800";
-const BASE_URL = "https://qrave-backend.onrender.com";
 
 try {
   WebBrowser.maybeCompleteAuthSession();

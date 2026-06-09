@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin screen for customizing and managing restaurant tables.
  *
  * Displays a floor overview with wavy header, table metrics, and allows filtering,
@@ -38,7 +38,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
-import { api } from "../../lib/apiClient";
+import { api, BASE_URL } from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 type Table = {
@@ -953,7 +953,7 @@ export default function CustomizeTables() {
         if (me?.restaurant_id) {
           try {
             const res = await fetch(
-              `https://qrave-backend.onrender.com/public/restaurants/${me.restaurant_id}/logo`,
+              `${BASE_URL}/public/restaurants/${me.restaurant_id}/logo`,
             );
             const data = await res.json();
             if (data.logo_url) {

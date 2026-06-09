@@ -17,7 +17,7 @@ import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg"
 const { width, height } = Dimensions.get("window");
 const THEME_COLOR = "#F4B400";
 const THEME_DARK = "#E5A800";
-const BASE_URL = "https://qrave-backend.onrender.com";
+import { BASE_URL } from "../lib/apiClient";
 
 const LockIcon = ({ color = "#999" }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">

@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import AdminSettingsHeader from "../../components/AdminSettingsHeader";
 import iconPng from "../../assets/images/icon.png";
-import apiClient from "../../lib/apiClient";
+import apiClient, { BASE_URL } from "../../lib/apiClient";
 import {
   bumpLogoVersion,
   getStoredLogoVersion,
@@ -251,7 +251,7 @@ export default function ProfileDetails() {
         try {
           const version = await getStoredLogoVersion();
           const res = await fetch(
-            `https://qrave-backend.onrender.com/public/restaurants/${profile.restaurant_id}/logo`,
+            `${BASE_URL}/public/restaurants/${profile.restaurant_id}/logo`,
           );
           const data = await res.json();
           setLogoUrl(withLogoVersion(data?.logo_url, version));

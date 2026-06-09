@@ -18,7 +18,7 @@ import {
 
 import iconPng from "../../assets/images/icon.png";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
-import apiClient from "../../lib/apiClient";
+import apiClient, { BASE_URL } from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -70,7 +70,7 @@ export default function SettingsDeliveryZones() {
       try {
         const version = await getStoredLogoVersion();
         const res = await fetch(
-          `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
+          `${BASE_URL}/public/restaurants/${rId}/logo`,
         );
         const data = await res.json();
         setLogoUrl(withLogoVersion(data?.logo_url, version));

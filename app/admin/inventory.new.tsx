@@ -22,7 +22,7 @@ import {
 } from "react-native";
 import iconPng from "../../assets/images/icon.png";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
-import { api } from "../../lib/apiClient";
+import { api, BASE_URL } from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 const MaterialIcons = MaterialIcons_ as any;
@@ -204,7 +204,7 @@ export default function Inventory() {
           if (rId) {
             try {
               const res = await fetch(
-                `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
+                `${BASE_URL}/public/restaurants/${rId}/logo`,
               );
               const data = await res.json();
               if (data?.logo_url) {

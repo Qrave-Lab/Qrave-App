@@ -19,7 +19,7 @@ import {
 
 import iconPng from "../../assets/images/icon.png";
 import AdminWavyHeader from "../../components/AdminWavyHeader";
-import apiClient from "../../lib/apiClient";
+import apiClient, { BASE_URL } from "../../lib/apiClient";
 
 /* ── Types ─────────────────────────────────────────────────── */
 type MenuItem = {
@@ -256,7 +256,7 @@ export default function TakeawayTab() {
     if (rId) {
       try {
         const logoRes = await fetch(
-          `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
+          `${BASE_URL}/public/restaurants/${rId}/logo`,
         );
         const logoData = await logoRes.json();
         setLogoUrl(logoData?.logo_url || null);

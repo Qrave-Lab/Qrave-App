@@ -11,6 +11,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   Image,
   ImageBackground,
   Platform,
@@ -34,6 +35,7 @@ type Table = {
   number?: number;
   zone?: string;
   is_enabled?: boolean;
+  qr_token?: string;
 };
 
 const templates = [
@@ -69,10 +71,9 @@ const getTableNumber = (t: Table) => {
 const getTableLabel = (t: Table | null) =>
   t ? String(getTableNumber(t)).padStart(2, "0") : "";
 
-const getTableUrl = (t: Table | null, restaurantId?: string) => {
-  if (!t) return "";
-  const base = `${WEB_BASE_URL}/menu/t/${getTableNumber(t)}`;
-  return restaurantId ? `${base}?restaurant=${restaurantId}` : base;
+const getTableUrl = (t: Table | null) => {
+  if (!t || !t.qr_token) return "";
+  return `${WEB_BASE_URL}/menu/qr/${t.qr_token}`;
 };
 
 export default function QrCodes() {
@@ -112,13 +113,26 @@ export default function QrCodes() {
         apiClient.get("/api/admin/tables"),
         apiClient.get("/api/admin/me"),
       ]);
-      const list = Array.isArray(tablesRes) ? tablesRes : [];
-      setTables(list);
-      if (list.length > 0) setSelectedTable(list[0]);
+      const list: Table[] = Array.isArray(tablesRes) ? tablesRes : [];
       const rid = me?.restaurant_id || me?.restaurantId || me?.id || "";
       setRestaurantId(rid);
+
+      const tablesWithTokens: Table[] = await Promise.all(
+        list.map(async (t: Table) => {
+          if (!t.id) return t;
+          try {
+            const res = await apiClient.post(`/api/admin/tables/${t.id}/qr-token`, {});
+            return { ...t, qr_token: res.token };
+          } catch {
+            return t;
+          }
+        })
+      );
+
+      setTables(tablesWithTokens);
+      if (tablesWithTokens.length > 0) setSelectedTable(tablesWithTokens[0]);
     } catch {
-      // ignore for now
+      // ignore
     }
   }, []);
 
@@ -180,7 +194,19 @@ export default function QrCodes() {
     return found?.family;
   }, [activeFont]);
 
-  const qrValue = getTableUrl(selectedTable, restaurantId);
+  const rotateQRToken = async (table: Table) => {
+    if (!table.id) return;
+    try {
+      const res = await apiClient.post(`/api/admin/tables/${table.id}/qr-token`, {});
+      const updater = (t: Table) => (t.id === table.id ? { ...t, qr_token: res.token } : t);
+      setTables((prev) => prev.map(updater));
+      setSelectedTable((prev: Table | null) => (prev?.id === table.id ? { ...prev, qr_token: res.token } : prev));
+    } catch {
+      Alert.alert("Error", "Failed to rotate QR token. Please try again.");
+    }
+  };
+
+  const qrValue = getTableUrl(selectedTable);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -367,7 +393,7 @@ export default function QrCodes() {
     });
 
   const handlePrint = async () => {
-    const url = getTableUrl(selectedTable, restaurantId);
+    const url = getTableUrl(selectedTable);
     if (!url) return;
     const qrForPrint = await getQrDataUrl();
     const html = buildPrintHtml(qrForPrint);
@@ -477,6 +503,15 @@ export default function QrCodes() {
               );
             })}
           </ScrollView>
+          {selectedTable && (
+            <TouchableOpacity
+              style={styles.rotateBtn}
+              onPress={() => rotateQRToken(selectedTable)}
+            >
+              <MaterialIcons name="refresh" size={14} color="#EF4444" />
+              <Text style={styles.rotateBtnText}>Rotate QR (old code becomes invalid)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── VISUAL DESIGN ── */}
@@ -1134,4 +1169,21 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   printBtnText: { color: "#fff", fontWeight: "700" },
+  rotateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#EF4444",
+    alignSelf: "flex-start",
+  },
+  rotateBtnText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "600",
+  },
 });

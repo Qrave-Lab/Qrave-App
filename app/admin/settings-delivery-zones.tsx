@@ -17,7 +17,7 @@ import {
 } from "react-native";
 
 import iconPng from "../../assets/images/icon.png";
-import AdminWavyHeader from "../../components/AdminWavyHeader";
+import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
 import apiClient, { BASE_URL } from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 

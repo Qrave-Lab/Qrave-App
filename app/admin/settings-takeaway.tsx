@@ -13,7 +13,7 @@ import {
     TextInput,
     View,
 } from "react-native";
-import AdminSettingsHeader from "../../components/AdminSettingsHeader";
+import AdminSettingsHeader from "../../components/admin/AdminSettingsHeader";
 import apiClient from "../../lib/apiClient";
 
 type MenuItem = {
@@ -335,7 +335,7 @@ export default function SettingsTakeaway() {
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Pressable
               style={styles.queueBtn}
-              onPress={() => router.push("/admin/queue")}
+              onPress={() => router.push("/admin/queue" as any)}
             >
               <MaterialIcons name="format-list-bulleted" size={24} color="#0F172A" />
             </Pressable>

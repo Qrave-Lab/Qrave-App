@@ -10,7 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { HapticTab } from "../../components/haptic-tab";
+import { HapticTab } from "../../components/common/HapticTab";
 import { WaiterColors } from "../../constants/theme";
 
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {

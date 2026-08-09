@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import AdminSettingsHeader from "../../components/AdminSettingsHeader";
+import AdminSettingsHeader from "../../components/admin/AdminSettingsHeader";
 import apiClient from "../../lib/apiClient";
 
 type Branch = {
@@ -276,7 +276,7 @@ export default function SettingsBranches() {
             ]}
             onPress={() =>
               isNewBranchLocked
-                ? router.push("/admin/subscription")
+                ? router.push("/admin/subscription" as any)
                 : setCreateOpen(true)
             }
             disabled={busy}

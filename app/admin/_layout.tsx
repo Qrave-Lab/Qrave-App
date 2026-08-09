@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { HapticTab } from "../../components/haptic-tab";
+import { HapticTab } from "../../components/common/HapticTab";
 import { useColorScheme } from "../../hooks/use-color-scheme";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";

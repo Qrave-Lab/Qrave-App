@@ -34,11 +34,11 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { ThemedText, type ThemedTextProps } from "../../components/themed-text";
+import { ThemedText, type ThemedTextProps } from "../../components/common/ThemedText";
 import { IconSymbol } from "../../components/ui/icon-symbol";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
-import WaiterWavyHeader from "../../components/WaiterWavyHeader";
+import WaiterWavyHeader from "../../components/waiter/WaiterWavyHeader";
 
 type Table = {
   id: string;

@@ -37,7 +37,7 @@ import {
   Image,
 } from "react-native";
 import { useRouter } from "expo-router";
-import AdminWavyHeader from "../../components/AdminWavyHeader";
+import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
 import { api, BASE_URL } from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 

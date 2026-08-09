@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
-import WaiterWavyHeader from "../../components/WaiterWavyHeader";
+import WaiterWavyHeader from "../../components/waiter/WaiterWavyHeader";
 
 type MenuItem = {
   id: string;

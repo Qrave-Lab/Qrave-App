@@ -17,7 +17,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import AdminSettingsHeader from "../../components/AdminSettingsHeader";
+import AdminSettingsHeader from "../../components/admin/AdminSettingsHeader";
 import iconPng from "../../assets/images/icon.png";
 import apiClient, { BASE_URL } from "../../lib/apiClient";
 import {

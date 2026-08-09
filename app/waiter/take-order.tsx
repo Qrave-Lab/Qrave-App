@@ -15,7 +15,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
-import WaiterWavyHeader from "../../components/WaiterWavyHeader";
+import WaiterWavyHeader from "../../components/waiter/WaiterWavyHeader";
 
 type Variant = {
   id: string;

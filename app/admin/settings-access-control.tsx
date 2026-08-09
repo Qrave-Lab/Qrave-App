@@ -9,7 +9,7 @@ import {
     Text,
     View,
 } from "react-native";
-import AdminSettingsHeader from "../../components/AdminSettingsHeader";
+import AdminSettingsHeader from "../../components/admin/AdminSettingsHeader";
 import apiClient from "../../lib/apiClient";
 
 type RoleKey = "manager" | "kitchen" | "waiter" | "cashier";

@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import iconPng from "../../assets/images/icon.png";
-import AdminWavyHeader from "../../components/AdminWavyHeader";
+import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
 import apiClient from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
@@ -187,7 +187,7 @@ export default function QueueScreen() {
           <View style={s.headerActions}>
             <Pressable
               style={s.backBtn}
-              onPress={() => router.replace("/admin/takeaway")}
+              onPress={() => router.push("/admin/takeaway" as any)}
             >
                <MaterialIcons name="arrow-back" size={24} color="#0F172A" />
             </Pressable>

@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import AdminSettingsHeader from "../../components/AdminSettingsHeader";
+import AdminSettingsHeader from "../../components/admin/AdminSettingsHeader";
 
 type PrinterChannel = "kitchen" | "billing" | "bar";
 type PrinterMode = "system" | "serial";

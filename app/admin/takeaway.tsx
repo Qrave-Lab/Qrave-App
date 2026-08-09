@@ -18,7 +18,7 @@ import {
 } from "react-native";
 
 import iconPng from "../../assets/images/icon.png";
-import AdminWavyHeader from "../../components/AdminWavyHeader";
+import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
 import apiClient, { BASE_URL } from "../../lib/apiClient";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -520,7 +520,7 @@ export default function TakeawayTab() {
           <View style={s.headerActions}>
             <Pressable
               style={s.queueBtn}
-              onPress={() => router.push("/admin/queue")}
+              onPress={() => router.push("/admin/queue" as any)}
             >
               <MaterialIcons name="format-list-bulleted" size={24} color="#0F172A" />
             </Pressable>

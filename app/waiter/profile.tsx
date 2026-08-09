@@ -13,8 +13,8 @@ import {
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import WaiterWavyHeader from "../../components/WaiterWavyHeader";
-import LogoutButton from "../../components/LogoutButton";
+import WaiterWavyHeader from "../../components/waiter/WaiterWavyHeader";
+import LogoutButton from "../../components/common/LogoutButton";
 
 type Profile = {
   name?: string;

@@ -17,7 +17,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import AdminWavyHeader from "../../components/AdminWavyHeader";
+import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
 import { AdminColors } from "../../constants/theme";
 import apiClient, { persistAuthFromResponse, BASE_URL } from "../../lib/apiClient";
 import iconPng from "../../assets/images/icon.png";

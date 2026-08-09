@@ -10,7 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import WaiterWavyHeader from "../../components/WaiterWavyHeader";
+import WaiterWavyHeader from "../../components/waiter/WaiterWavyHeader";
 import { WaiterColors } from "../../constants/theme";
 import apiClient from "../../lib/apiClient";
 

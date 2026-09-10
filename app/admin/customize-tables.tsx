@@ -47,6 +47,7 @@ type Table = {
   number?: number | string;
   name?: string;
   isActive?: boolean;
+  isEnabled?: boolean;
   items: number;
   total: string;
   status: string;
@@ -220,15 +221,23 @@ export default function CustomizeTables() {
             t.id ||
             t.tableID;
           const tableId = t.id || t.table_id || t.tableID;
-          const isActive = false;
+          const isEnabled =
+            t?.is_enabled !== false &&
+            t?.is_enabled !== "false" &&
+            t?.enabled !== false &&
+            t?.enabled !== "false" &&
+            t?.isDisabled !== true &&
+            t?.disabled !== true &&
+            t?.status !== "disabled";
           return {
             id: String(tableId || tableNumber || t.name || t.id),
             tableId: tableId ? String(tableId) : undefined,
             number: tableNumber,
-            isActive,
+            isEnabled,
+            isActive: false,
             items: t.items ?? 0,
             total: "-",
-            status: "free",
+            status: isEnabled ? "free" : "disabled",
             time: t.time,
             flag: t.flag,
           };
@@ -365,6 +374,14 @@ export default function CustomizeTables() {
   const tablesWithOrders = useMemo(() => {
     return tablesData.map((t) => {
       const tableNumber = getTableNumber(t);
+      if (t.status === "disabled" || t.isEnabled === false) {
+        return {
+          ...t,
+          status: "disabled",
+          isActive: false,
+        };
+      }
+
       if (tableNumber === undefined) return t;
       const stat = tableOrderStats.get(tableNumber);
       const bg = billGroups.get(tableNumber);
@@ -1257,7 +1274,10 @@ export default function CustomizeTables() {
         <View style={styles.tablesGrid}>
           {tables.map((item) => {
             const tNum = getTableNumber(item);
-            const isFree = item.status === "free" || !item.isActive;
+            const isDisabled =
+              item.status === "disabled" || item.isEnabled === false;
+            const isFree =
+              !isDisabled && (item.status === "free" || !item.isActive);
             const isBillReq = item.flag === "bill";
             const bg = tNum !== undefined ? billGroups.get(tNum) : undefined;
 
@@ -1266,13 +1286,18 @@ export default function CustomizeTables() {
                 key={item.id}
                 style={[
                   styles.tableCard,
+                  isDisabled && styles.tableCardDisabled,
                   isFree && styles.tableCardFree,
-                  !isFree && !isBillReq && styles.tableCardOccupied,
+                  !isFree &&
+                    !isDisabled &&
+                    !isBillReq &&
+                    styles.tableCardOccupied,
                   isBillReq && styles.tableCardBill,
                 ]}
-                activeOpacity={isFree ? 1 : 0.7}
+                activeOpacity={isFree || isDisabled ? 1 : 0.7}
+                disabled={isDisabled}
                 onPress={() => {
-                  if (!isFree) {
+                  if (!isFree && !isDisabled) {
                     setActionTableId(item.id);
                     setActionSheetOpen(true);
                   }
@@ -1280,16 +1305,25 @@ export default function CustomizeTables() {
               >
                 {/* Card Header */}
                 <View style={styles.tableCardHeader}>
-                  <Text style={styles.tableNumber}>{padNumber(tNum)}</Text>
+                  <Text
+                    style={[
+                      styles.tableNumber,
+                      isDisabled && styles.tableNumberDisabled,
+                    ]}
+                  >
+                    {padNumber(tNum)}
+                  </Text>
                   <View
                     style={[
                       styles.statusBadge,
                       {
-                        backgroundColor: isFree
+                        backgroundColor: isDisabled
                           ? "#F3F4F6"
-                          : isBillReq
-                            ? "#FEF2F2"
-                            : "#ECFDF5",
+                          : isFree
+                            ? "#F3F4F6"
+                            : isBillReq
+                              ? "#FEF2F2"
+                              : "#ECFDF5",
                       },
                     ]}
                   >
@@ -1297,21 +1331,29 @@ export default function CustomizeTables() {
                       style={[
                         styles.statusText,
                         {
-                          color: isFree
+                          color: isDisabled
                             ? "#9CA3AF"
-                            : isBillReq
-                              ? "#EF4444"
-                              : "#059669",
+                            : isFree
+                              ? "#9CA3AF"
+                              : isBillReq
+                                ? "#EF4444"
+                                : "#059669",
                         },
                       ]}
                     >
-                      {isFree ? "FREE" : isBillReq ? "Bill Req" : "SEATED"}
+                      {isDisabled
+                        ? "NOT IN USE"
+                        : isFree
+                          ? "FREE"
+                          : isBillReq
+                            ? "Bill Req"
+                            : "SEATED"}
                     </Text>
                   </View>
                 </View>
 
                 {/* Merged badge */}
-                {bg && bg.linkedTableNumbers.length > 1 && (
+                {!isDisabled && bg && bg.linkedTableNumbers.length > 1 && (
                   <View style={styles.mergedBadge}>
                     <Text style={styles.mergedBadgeText}>
                       ðŸ”— T
@@ -1322,7 +1364,12 @@ export default function CustomizeTables() {
                   </View>
                 )}
 
-                {isFree ? (
+                {isDisabled ? (
+                  <View style={styles.emptyStateContainer}>
+                    <MaterialIcons name="cancel" size={32} color="#D1D5DB" />
+                    <Text style={styles.availableText}>Not in use</Text>
+                  </View>
+                ) : isFree ? (
                   /* Free table empty state */
                   <View style={styles.emptyStateContainer}>
                     <MaterialIcons
@@ -2335,6 +2382,14 @@ const styles = StyleSheet.create({
     borderStyle: "dashed" as any,
     borderColor: "#D5D5D5",
   },
+  tableCardDisabled: {
+    opacity: 0.6,
+    backgroundColor: "#F9FAFB",
+    borderStyle: "dashed" as any,
+    borderColor: "#D1D5DB",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   tableCardOccupied: {
     borderColor: "#FDE68A",
     backgroundColor: "#FFFDF5",
@@ -2357,6 +2412,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#1F2937",
     letterSpacing: -0.3,
+  },
+  tableNumberDisabled: {
+    color: "#9CA3AF",
   },
   statusBadge: {
     paddingHorizontal: 8,

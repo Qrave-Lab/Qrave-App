@@ -46,6 +46,7 @@ type Table = {
   number?: number | string;
   name?: string;
   isActive?: boolean;
+  isEnabled?: boolean;
   items: number;
   total: string;
   status: string;
@@ -208,15 +209,24 @@ export default function CustomizeTables() {
             t.id ||
             t.tableID;
           const tableId = t.id || t.table_id || t.tableID;
-          const isActive = false;
+          const isEnabled =
+            t?.is_enabled !== false &&
+            t?.is_enabled !== "false" &&
+            t?.enabled !== false &&
+            t?.enabled !== "false" &&
+            t?.isDisabled !== true &&
+            t?.disabled !== true &&
+            t?.status !== "disabled";
+
           return {
             id: String(tableId || tableNumber || t.name || t.id),
             tableId: tableId ? String(tableId) : undefined,
             number: tableNumber,
-            isActive,
+            isEnabled,
+            isActive: false,
             items: t.items ?? 0,
             total: "-",
-            status: "free",
+            status: isEnabled ? "free" : "disabled",
             time: t.time,
             flag: t.flag,
           };
@@ -287,6 +297,33 @@ export default function CustomizeTables() {
     return `${m}m`;
   };
 
+  const getTableNumber = (t: Table | undefined | null) => {
+    if (!t) return undefined;
+    const raw =
+      (t as any).number ||
+      (t as any).table_number ||
+      (t as any).tableNumber ||
+      (t as any).name ||
+      (t as any).id;
+    const num = Number(raw);
+    if (!isNaN(num) && num > 0) return num;
+    const fromId = String(raw || "").replace(/\\D/g, "");
+    return fromId ? Number(fromId) : undefined;
+  };
+
+  const disabledTableNumbers = useMemo(() => {
+    const numbers = new Set<number>();
+    for (const table of tablesData) {
+      if (table.status === "disabled" || table.isEnabled === false) {
+        const tableNumber = getTableNumber(table);
+        if (tableNumber !== undefined) {
+          numbers.add(tableNumber);
+        }
+      }
+    }
+    return numbers;
+  }, [tablesData]);
+
   const tableOrderStats = useMemo(() => {
     const stats = new Map<
       number,
@@ -295,6 +332,7 @@ export default function CustomizeTables() {
     for (const order of activeOrders) {
       const tableNumber = order.table_number;
       if (typeof tableNumber !== "number") continue;
+      if (disabledTableNumbers.has(tableNumber)) continue;
       const prev = stats.get(tableNumber) || { items: 0, total: 0 };
       const itemsCount = (order.items || []).reduce(
         (sum, i) => sum + (Number(i.quantity) || 0),
@@ -314,21 +352,7 @@ export default function CustomizeTables() {
       });
     }
     return stats;
-  }, [activeOrders]);
-
-  const getTableNumber = (t: Table | undefined | null) => {
-    if (!t) return undefined;
-    const raw =
-      (t as any).number ||
-      (t as any).table_number ||
-      (t as any).tableNumber ||
-      (t as any).name ||
-      (t as any).id;
-    const num = Number(raw);
-    if (!isNaN(num) && num > 0) return num;
-    const fromId = String(raw || "").replace(/\\D/g, "");
-    return fromId ? Number(fromId) : undefined;
-  };
+  }, [activeOrders, disabledTableNumbers]);
 
   const isUuid = (value: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -362,6 +386,22 @@ export default function CustomizeTables() {
   const tablesWithOrders = useMemo(() => {
     return tablesData.map((t) => {
       const tableNumber = getTableNumber(t);
+      if (t.status === "disabled" || t.isEnabled === false) {
+        return {
+          ...t,
+          status: "disabled",
+          isActive: false,
+        };
+      }
+
+      if (tableNumber !== undefined && disabledTableNumbers.has(tableNumber)) {
+        return {
+          ...t,
+          status: "disabled",
+          isActive: false,
+        };
+      }
+
       if (tableNumber === undefined) return t;
       const stat = tableOrderStats.get(tableNumber);
       const bg = billGroups.get(tableNumber);
@@ -409,7 +449,13 @@ export default function CustomizeTables() {
         time: stat.time || t.time,
       };
     });
-  }, [tablesData, tableOrderStats, billGroups, activeSessionTableNumbers]);
+  }, [
+    tablesData,
+    tableOrderStats,
+    billGroups,
+    activeSessionTableNumbers,
+    disabledTableNumbers,
+  ]);
 
   const tables = useMemo(() => {
     const filtered = tablesWithOrders
@@ -565,7 +611,11 @@ export default function CustomizeTables() {
 
       const ordersList =
         ordersRes.status === "fulfilled"
-          ? (ordersRes.value as ActiveOrdersResponse)?.orders || []
+          ? ((ordersRes.value as ActiveOrdersResponse)?.orders || []).filter(
+              (order) =>
+                !disabledTableNumbers.has(Number(order?.table_number)) ||
+                Number.isNaN(Number(order?.table_number)),
+            )
           : [];
       if (ordersRes.status === "rejected") {
         errors.push(formatApiError(ordersRes.reason, "Orders request failed"));
@@ -573,7 +623,9 @@ export default function CustomizeTables() {
 
       const serviceCallsList =
         serviceRes.status === "fulfilled"
-          ? (serviceRes.value as ServiceCallAPI[]) || []
+          ? ((serviceRes.value as ServiceCallAPI[]) || []).filter(
+              (call) => !disabledTableNumbers.has(Number(call?.table_number)),
+            )
           : [];
       if (serviceRes.status === "rejected") {
         errors.push(
@@ -600,6 +652,12 @@ export default function CustomizeTables() {
         : Array.isArray((sessionsPayload as ActiveSessionsResponse)?.sessions)
           ? (sessionsPayload as ActiveSessionsResponse).sessions
           : [];
+      const validSessions = sessionsList.filter(
+        (session) =>
+          !disabledTableNumbers.has(Number(session?.table_number)) &&
+          Number.isFinite(Number(session?.table_number)) &&
+          Number(session?.table_number) > 0,
+      );
       if (sessionsRes.status === "rejected") {
         errors.push(
           formatApiError(sessionsRes.reason, "Active sessions request failed"),
@@ -611,7 +669,7 @@ export default function CustomizeTables() {
       setTodaySales(salesTotal);
       setActiveSessionTableNumbers(
         new Set(
-          sessionsList
+          validSessions
             .map((s) => Number(s?.table_number))
             .filter((n) => Number.isFinite(n) && n > 0),
         ),
@@ -644,6 +702,7 @@ export default function CustomizeTables() {
     buildServiceActivities,
     formatApiError,
     fetchBillGroup,
+    disabledTableNumbers,
   ]);
 
   const handleKitchenStatus = async (
@@ -1180,166 +1239,220 @@ export default function CustomizeTables() {
         keyExtractor={(t) => t.id}
         numColumns={2}
         columnWrapperStyle={{ justifyContent: "space-between" }}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.tableCard,
-              !item.isActive ? styles.tableFree : null,
-              item.flag === "bill" ? styles.tableBill : null,
-              item.flag === "long" ? styles.tableLong : null,
-              freeLoading === item.id ? { opacity: 0.5 } : null,
-            ]}
-            activeOpacity={1}
-          >
+        renderItem={({ item }) => {
+          const isDisabled =
+            item.status === "disabled" || item.isEnabled === false;
+          const isFree = !isDisabled && !item.isActive;
+          const isBillRequested = item.flag === "bill";
+
+          return (
             <TouchableOpacity
-              style={styles.optionsBtn}
-              onPress={() =>
-                setOpenMenuId(openMenuId === item.id ? null : item.id)
-              }
+              style={[
+                styles.tableCard,
+                isDisabled && styles.tableCardDisabled,
+                isFree && styles.tableCardFree,
+                item.isActive && !isBillRequested && styles.tableCardOccupied,
+                isBillRequested && styles.tableCardBill,
+                freeLoading === item.id ? { opacity: 0.5 } : null,
+              ]}
+              activeOpacity={1}
             >
-              <Text style={{ fontSize: 18 }}>...</Text>
-            </TouchableOpacity>
-            {openMenuId === item.id ? (
-              <View style={styles.optionsMenu}>
-                {[
-                  {
-                    key: "order",
-                    label: "Place Order",
-                    icon: "cart",
-                  },
-                  ...(item.isActive
-                    ? [
-                        {
-                          key: "move",
-                          label: "Move Table",
-                          icon: "arrow.right.arrow.left",
-                        },
-                        {
-                          key: "merge",
-                          label: "Merge Bill",
-                          icon: "arrow.triangle.branch",
-                        },
-                        { key: "print", label: "Print Bill", icon: "doc.text" },
-                        {
-                          key: "paid",
-                          label: "Mark Paid",
-                          icon: "checkmark.circle",
-                          tone: "success",
-                        },
-                        {
-                          key: "free",
-                          label: "Free Table",
-                          icon: "square.and.arrow.up",
-                        },
-                      ]
-                    : []),
-                ].map((op: any) => (
-                  <TouchableOpacity
-                    key={op.key}
-                    onPress={() => {
-                      setOpenMenuId(null);
-                      if (op.key === "order") {
-                        handleOpenTakeOrder(item);
-                        return;
-                      }
-                      if (op.key === "move") {
-                        setMoveError(null);
-                        setMoveSource(item.id);
-                        setMoveModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "merge") {
-                        setMergeError(null);
-                        setMergeSource(item.id);
-                        setMergeModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "print") {
-                        setPrintSource(item.id);
-                        setPrintModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "paid") {
-                        setPaidSource(item.id);
-                        setPaidModalOpen(true);
-                        return;
-                      }
-                      if (op.key === "free") {
-                        handleFreeTable(item.id);
-                        return;
-                      }
-                    }}
-                    style={styles.optionsItem}
-                  >
-                    <View style={styles.optionsItemRow}>
-                      <IconSymbol
-                        name={op.icon as any}
-                        size={16}
-                        color={
-                          op.tone === "success" ? "#16a34a" : WaiterColors.text
+              <TouchableOpacity
+                style={styles.optionsBtn}
+                onPress={() =>
+                  setOpenMenuId(openMenuId === item.id ? null : item.id)
+                }
+              >
+                <Text style={{ fontSize: 18 }}>...</Text>
+              </TouchableOpacity>
+              {openMenuId === item.id ? (
+                <View style={styles.optionsMenu}>
+                  {[
+                    {
+                      key: "order",
+                      label: "Place Order",
+                      icon: "cart",
+                    },
+                    ...(item.isActive
+                      ? [
+                          {
+                            key: "move",
+                            label: "Move Table",
+                            icon: "arrow.right.arrow.left",
+                          },
+                          {
+                            key: "merge",
+                            label: "Merge Bill",
+                            icon: "arrow.triangle.branch",
+                          },
+                          {
+                            key: "print",
+                            label: "Print Bill",
+                            icon: "doc.text",
+                          },
+                          {
+                            key: "paid",
+                            label: "Mark Paid",
+                            icon: "checkmark.circle",
+                            tone: "success",
+                          },
+                          {
+                            key: "free",
+                            label: "Free Table",
+                            icon: "square.and.arrow.up",
+                          },
+                        ]
+                      : []),
+                  ].map((op: any) => (
+                    <TouchableOpacity
+                      key={op.key}
+                      onPress={() => {
+                        setOpenMenuId(null);
+                        if (op.key === "order") {
+                          handleOpenTakeOrder(item);
+                          return;
                         }
-                      />
-                      <Text
-                        style={
-                          op.tone === "success"
-                            ? styles.optionsItemTextSuccess
-                            : styles.optionsItemText
+                        if (op.key === "move") {
+                          setMoveError(null);
+                          setMoveSource(item.id);
+                          setMoveModalOpen(true);
+                          return;
                         }
-                      >
-                        {op.label}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-            <View>
-              <WaiterText type="title">
-                Table {item.number || item.id}
-              </WaiterText>
-              {item.mergedWith && item.mergedWith.length > 0 ? (
-                <View style={styles.mergedBadge}>
-                  <Text style={styles.mergedBadgeText}>
-                    🔗 Merged with T{item.mergedWith.join(", T")}
-                  </Text>
+                        if (op.key === "merge") {
+                          setMergeError(null);
+                          setMergeSource(item.id);
+                          setMergeModalOpen(true);
+                          return;
+                        }
+                        if (op.key === "print") {
+                          setPrintSource(item.id);
+                          setPrintModalOpen(true);
+                          return;
+                        }
+                        if (op.key === "paid") {
+                          setPaidSource(item.id);
+                          setPaidModalOpen(true);
+                          return;
+                        }
+                        if (op.key === "free") {
+                          handleFreeTable(item.id);
+                          return;
+                        }
+                      }}
+                      style={styles.optionsItem}
+                    >
+                      <View style={styles.optionsItemRow}>
+                        <IconSymbol
+                          name={op.icon as any}
+                          size={16}
+                          color={
+                            op.tone === "success"
+                              ? "#16a34a"
+                              : WaiterColors.text
+                          }
+                        />
+                        <Text
+                          style={
+                            op.tone === "success"
+                              ? styles.optionsItemTextSuccess
+                              : styles.optionsItemText
+                          }
+                        >
+                          {op.label}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               ) : null}
-              <WaiterText
-                style={{
-                  color: item.isActive ? "green" : "#94a3b8",
-                  fontWeight: "bold",
-                }}
-              >
-                {item.isActive ? "Seated" : "Available"}
-              </WaiterText>
-              <View style={styles.tableMetaRow}>
-                <IconSymbol
-                  name={item.isActive ? "clock" : "fork.knife"}
-                  size={14}
-                  color={item.isActive ? "#94a3b8" : "#cbd5e1"}
-                />
-                <WaiterText
-                  style={
-                    item.isActive
-                      ? styles.tableMetaText
-                      : styles.tableMetaTextMuted
-                  }
-                >
-                  {item.isActive ? item.time || "Just now" : "Available"}
+              <View style={styles.tableCardHeader}>
+                <WaiterText style={styles.tableNumber}>
+                  {item.number || item.id}
                 </WaiterText>
-              </View>
-            </View>
-            {item.isActive ? (
-              <View style={styles.tableStats}>
-                <View style={styles.itemsBox}>
-                  <WaiterText>ITEMS</WaiterText>
-                  <WaiterText type="defaultSemiBold">{item.items}</WaiterText>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    isDisabled
+                      ? styles.statusBadgeDisabled
+                      : isFree
+                        ? styles.statusBadgeFree
+                        : styles.statusBadgeOccupied,
+                  ]}
+                >
+                  <Text style={styles.statusText}>
+                    {isDisabled ? "NOT IN USE" : isFree ? "FREE" : "SEATED"}
+                  </Text>
                 </View>
-                <WaiterText type="defaultSemiBold">{item.total}</WaiterText>
               </View>
-            ) : null}
-          </TouchableOpacity>
-        )}
+              <View>
+                {item.mergedWith && item.mergedWith.length > 0 ? (
+                  <View style={styles.mergedBadge}>
+                    <Text style={styles.mergedBadgeText}>
+                      🔗 Merged with T{item.mergedWith.join(", T")}
+                    </Text>
+                  </View>
+                ) : null}
+                <WaiterText
+                  style={{
+                    color: isDisabled
+                      ? "#9CA3AF"
+                      : item.isActive
+                        ? WaiterColors.primary
+                        : "#94a3b8",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {isDisabled
+                    ? "Not in use"
+                    : item.isActive
+                      ? "Seated"
+                      : "Available"}
+                </WaiterText>
+                <View style={styles.tableMetaRow}>
+                  <IconSymbol
+                    name={
+                      isDisabled
+                        ? "xmark.circle"
+                        : item.isActive
+                          ? "clock"
+                          : "fork.knife"
+                    }
+                    size={14}
+                    color={
+                      isDisabled
+                        ? "#CBD5E1"
+                        : item.isActive
+                          ? "#94a3b8"
+                          : "#cbd5e1"
+                    }
+                  />
+                  <WaiterText
+                    style={
+                      item.isActive && !isDisabled
+                        ? styles.tableMetaText
+                        : styles.tableMetaTextMuted
+                    }
+                  >
+                    {isDisabled
+                      ? "Not in use"
+                      : item.isActive
+                        ? item.time || "Just now"
+                        : "Available"}
+                  </WaiterText>
+                </View>
+              </View>
+              {item.isActive && !isDisabled ? (
+                <View style={styles.tableStats}>
+                  <View style={styles.itemsBox}>
+                    <WaiterText>ITEMS</WaiterText>
+                    <WaiterText type="defaultSemiBold">{item.items}</WaiterText>
+                  </View>
+                  <WaiterText type="defaultSemiBold">{item.total}</WaiterText>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          );
+        }}
         ListFooterComponent={<View style={{ height: 8 }} />}
       />
 
@@ -1899,32 +2012,73 @@ const styles = StyleSheet.create({
   },
   tableCard: {
     width: "48%",
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    marginBottom: 12,
-    position: "relative",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1.2,
+    borderColor: "#D1FAE5",
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
-  tableFree: {
-    backgroundColor: "#fff",
+  tableCardFree: {
+    opacity: 0.55,
+    backgroundColor: "#FAFAFA",
+    borderStyle: "dashed" as any,
+    borderColor: "#A7F3D0",
   },
-  tableBill: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#38BDF8",
-    backgroundColor: "#F0FAFF",
+  tableCardDisabled: {
+    opacity: 0.6,
+    backgroundColor: "#F9FAFB",
+    borderStyle: "dashed" as any,
+    borderColor: "#D1D5DB",
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  tableLong: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#F87171",
-    backgroundColor: "#FFF5F5",
+  tableCardOccupied: {
+    borderColor: "#99F6E4",
+    backgroundColor: "#F0FDFA",
+    shadowColor: "#0F766E",
+    shadowOpacity: 0.12,
+    elevation: 4,
   },
-
-  tableStats: { marginTop: 8, alignItems: "flex-end" },
+  tableCardBill: {
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+  },
+  tableCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  tableNumber: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeFree: { backgroundColor: "#F3F4F6" },
+  statusBadgeDisabled: { backgroundColor: "#F3F4F6" },
+  statusBadgeOccupied: { backgroundColor: "#CCFBF1" },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#0F766E",
+  },
+  tableStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
   tableMetaRow: {
     flexDirection: "row",
     alignItems: "center",

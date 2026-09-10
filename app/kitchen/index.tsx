@@ -127,18 +127,36 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 10,
   },
+  cardHeaderInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
   tableTitle: { fontSize: 16, fontWeight: "800", color: K.text },
-  orderIdText: { fontSize: 12, color: K.muted, fontWeight: "600" },
+  orderIdText: {
+    fontSize: 12,
+    color: K.muted,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
   elapsedBadge: {
     backgroundColor: "#FEF3C7",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    flexShrink: 1,
+    maxWidth: "46%",
+    marginLeft: 8,
   },
-  elapsedText: { fontSize: 11, fontWeight: "700", color: "#92400E" },
+  elapsedText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#92400E",
+    flexShrink: 1,
+    textAlign: "center",
+  },
   divider: { height: 1, backgroundColor: "#F5F5F4", marginVertical: 6 },
   itemRow: {
     flexDirection: "row",
@@ -350,11 +368,15 @@ export default function KitchenScreen() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <View>
+                <View style={styles.cardHeaderInfo}>
                   <Text style={styles.tableTitle}>
                     Table {item.table_number ?? "-"}
                   </Text>
-                  <Text style={styles.orderIdText}>
+                  <Text
+                    style={styles.orderIdText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     Order #{item.id || item.order_id}
                   </Text>
                 </View>

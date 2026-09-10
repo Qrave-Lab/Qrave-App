@@ -555,7 +555,20 @@ export default function LoginScreen() {
       });
       if (!otpRes.ok) {
         const body = await otpRes.text().catch(() => "");
-        throw new Error(body || "Failed to send verification code");
+        const responseMessage = (() => {
+          try {
+            return JSON.parse(body)?.message || JSON.parse(body)?.error;
+          } catch {
+            return body;
+          }
+        })();
+        const error = new Error(
+          otpRes.status === 503
+            ? "Verification email service is temporarily unavailable. Please try again later."
+            : responseMessage || "Failed to send verification code",
+        );
+        error.status = otpRes.status;
+        throw error;
       }
 
       await AsyncStorage.setItem(

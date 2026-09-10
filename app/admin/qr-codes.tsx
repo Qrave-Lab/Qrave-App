@@ -68,6 +68,9 @@ const getTableNumber = (t: Table) => {
   return fromId ? Number(fromId) : 0;
 };
 
+const isTableEnabled = (t: Table) =>
+  t?.is_enabled !== false && (t as any)?.enabled !== false && (t as any)?.disabled !== true && (t as any)?.isDisabled !== true;
+
 const getTableLabel = (t: Table | null) =>
   t ? String(getTableNumber(t)).padStart(2, "0") : "";
 
@@ -117,8 +120,9 @@ export default function QrCodes() {
       const rid = me?.restaurant_id || me?.restaurantId || me?.id || "";
       setRestaurantId(rid);
 
+      const enabledTables = list.filter(isTableEnabled);
       const tablesWithTokens: Table[] = await Promise.all(
-        list.map(async (t: Table) => {
+        enabledTables.map(async (t: Table) => {
           if (!t.id) return t;
           try {
             const res = await apiClient.post(`/api/admin/tables/${t.id}/qr-token`, {});
@@ -126,11 +130,15 @@ export default function QrCodes() {
           } catch {
             return t;
           }
-        })
+        }),
       );
 
       setTables(tablesWithTokens);
-      if (tablesWithTokens.length > 0) setSelectedTable(tablesWithTokens[0]);
+      if (tablesWithTokens.length > 0) {
+        setSelectedTable(tablesWithTokens[0]);
+      } else {
+        setSelectedTable(null);
+      }
     } catch {
       // ignore
     }

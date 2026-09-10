@@ -114,6 +114,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
   },
+  subcategoryHeader: {
+    paddingHorizontal: 4,
+    paddingTop: 10,
+    paddingBottom: 6,
+    color: WaiterColors.primary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
   meta: { marginTop: 2 },
   loadingBox: { alignItems: "center", paddingVertical: 40 },
   loadingText: { marginTop: 10, color: "#6b7280", fontWeight: "600" },
@@ -233,6 +241,29 @@ export default function WaiterMenu() {
     });
   }, [availableItems, activeCategory, search]);
 
+  const menuRows = useMemo(() => {
+    const rows: Array<
+      | { type: "subcategory"; id: string; name: string }
+      | { type: "item"; id: string; item: MenuItem }
+    > = [];
+    let lastSubcategory = "";
+
+    for (const item of filteredItems) {
+      const subcategory = item.categoryName || "Uncategorized";
+      if (subcategory !== lastSubcategory) {
+        rows.push({
+          type: "subcategory",
+          id: `subcategory-${subcategory}`,
+          name: subcategory,
+        });
+        lastSubcategory = subcategory;
+      }
+      rows.push({ type: "item", id: item.id, item });
+    }
+
+    return rows;
+  }, [filteredItems]);
+
   const categoryTabs = useMemo(
     () => ["all", ...parentCategories.map((c) => c.name)],
     [parentCategories],
@@ -293,8 +324,8 @@ export default function WaiterMenu() {
         </View>
       ) : (
         <FlatList
-          data={filteredItems}
-          keyExtractor={(item) => item.id}
+          data={menuRows}
+          keyExtractor={(row) => row.id}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -310,39 +341,46 @@ export default function WaiterMenu() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.imageBox}>
-                {item.imageUrl && !imageErrors[item.id] ? (
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.image}
-                    onError={() =>
-                      setImageErrors((prev) => ({ ...prev, [item.id]: true }))
-                    }
-                  />
-                ) : (
-                  <Text style={{ color: "#94A3B8", fontWeight: "700" }}>
-                    {item.name.slice(0, 1).toUpperCase()}
+          renderItem={({ item: row }) => {
+            if (row.type === "subcategory") {
+              return <Text style={styles.subcategoryHeader}>{row.name}</Text>;
+            }
+
+            const item = row.item;
+            return (
+              <View style={styles.card}>
+                <View style={styles.imageBox}>
+                  {item.imageUrl && !imageErrors[item.id] ? (
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.image}
+                      onError={() =>
+                        setImageErrors((prev) => ({ ...prev, [item.id]: true }))
+                      }
+                    />
+                  ) : (
+                    <Text style={{ color: "#94A3B8", fontWeight: "700" }}>
+                      {item.name.slice(0, 1).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text style={styles.desc} numberOfLines={2}>
+                    {item.description || "No description"}
                   </Text>
-                )}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.desc} numberOfLines={2}>
-                  {item.description || "No description"}
-                </Text>
-                <View style={styles.meta}>
-                  <Text style={styles.categoryText}>
-                    {resolveParentName(item)}
-                  </Text>
-                  <Text style={styles.price}>
-                    Rs {item.price.toLocaleString()}
-                  </Text>
+                  <View style={styles.meta}>
+                    <Text style={styles.categoryText}>
+                      {item.categoryName || resolveParentName(item)}
+                    </Text>
+                    <Text style={styles.price}>
+                      Rs {item.price.toLocaleString()}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
+            );
+          }}
         />
       )}
     </View>

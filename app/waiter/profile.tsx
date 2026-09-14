@@ -47,70 +47,6 @@ const formatDate = (value?: string) => {
   });
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFB" },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: WaiterColors.primary,
-    marginBottom: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#94A3B8",
-    textTransform: "uppercase",
-  },
-  value: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: WaiterColors.text,
-    marginTop: 6,
-  },
-  row: { marginBottom: 14 },
-  input: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    color: WaiterColors.text,
-    marginTop: 6,
-    fontSize: 15,
-  },
-  saveBtn: {
-    backgroundColor: WaiterColors.primary,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    shadowColor: WaiterColors.primary,
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  loadingBox: { alignItems: "center", paddingTop: 40 },
-  loadingText: { marginTop: 8, color: "#64748B" },
-  emptyText: { color: "#64748B", textAlign: "center" },
-});
-
 export default function WaiterProfile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [editable, setEditable] = useState({ name: "", phone: "" });
@@ -245,36 +181,11 @@ export default function WaiterProfile() {
 
   return (
     <View style={styles.container}>
-      <WaiterWavyHeader height={140}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            width: "100%",
-          }}
-        >
-          <View>
-            <Text
-              style={{
-                fontSize: 22,
-                fontWeight: "900",
-                color: "#fff",
-                letterSpacing: -0.5,
-              }}
-            >
-              Profile
-            </Text>
-            <Text
-              style={{
-                fontSize: 12,
-                color: "rgba(255,255,255,0.85)",
-                fontWeight: "600",
-                marginTop: 2,
-              }}
-            >
-              Edit name/phone only
-            </Text>
+      <WaiterWavyHeader height={160}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Profile</Text>
+            <Text style={styles.headerSubtitle}>Edit name/phone only</Text>
           </View>
           <LogoutButton />
         </View>
@@ -291,6 +202,7 @@ export default function WaiterProfile() {
         </View>
       ) : (
         <ScrollView
+          contentContainerStyle={styles.scrollContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -334,6 +246,7 @@ export default function WaiterProfile() {
           </View>
 
           <View style={styles.card}>
+            <Text style={styles.sectionLabel}>Account Details</Text>
             {[
               { label: "Email", value: profile?.email },
               { label: "Role", value: profile?.role },
@@ -343,29 +256,30 @@ export default function WaiterProfile() {
               { label: "Last Login", value: formatDate(profile?.last_login) },
             ]
               .filter((f) => f.value)
-              .map((field) => (
-                <View key={field.label} style={styles.row}>
-                  <Text style={styles.label}>{field.label}</Text>
-                  <Text style={styles.value}>{field.value}</Text>
+              .map((field, index) => (
+                <View key={field.label} style={[styles.detailRow, index !== 0 && styles.detailRowBorder]}>
+                  <Text style={styles.detailLabel}>{field.label}</Text>
+                  <Text style={styles.detailValue}>{field.value}</Text>
                 </View>
               ))}
           </View>
 
           <View style={styles.card}>
+            <Text style={styles.sectionLabel}>Restaurant Info</Text>
             {[
               { label: "Restaurant", value: profile?.restaurant_name },
               { label: "Restaurant ID", value: profile?.restaurant_id },
-              { label: "Restaurant Phone", value: profile?.restaurant_phone },
+              { label: "Phone", value: profile?.restaurant_phone },
               { label: "Address", value: profile?.restaurant_address },
               { label: "City", value: profile?.restaurant_city },
               { label: "State", value: profile?.restaurant_state },
               { label: "Country", value: profile?.restaurant_country },
             ]
               .filter((f) => f.value)
-              .map((field) => (
-                <View key={field.label} style={styles.row}>
-                  <Text style={styles.label}>{field.label}</Text>
-                  <Text style={styles.value}>{field.value}</Text>
+              .map((field, index) => (
+                <View key={field.label} style={[styles.detailRow, index !== 0 && styles.detailRowBorder]}>
+                  <Text style={styles.detailLabel}>{field.label}</Text>
+                  <Text style={styles.detailValue}>{field.value}</Text>
                 </View>
               ))}
           </View>
@@ -374,3 +288,114 @@ export default function WaiterProfile() {
     </View>
   );
 }
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  headerCenter: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.8)",
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 16,
+    marginBottom: 16,
+  },
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0F172A",
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  row: {
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  detailRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0F172A",
+  },
+  input: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    color: "#0F172A",
+    marginTop: 6,
+    fontSize: 15,
+  },
+  saveBtn: {
+    backgroundColor: WaiterColors.primary,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
+  },
+  saveBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  loadingBox: {
+    alignItems: "center",
+    paddingTop: 40,
+  },
+  loadingText: {
+    marginTop: 8,
+    color: "#64748B",
+  },
+  emptyText: {
+    color: "#64748B",
+    textAlign: "center",
+  },
+});

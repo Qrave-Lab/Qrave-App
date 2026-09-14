@@ -1,4 +1,3 @@
-// app/index.tsx
 import React, { useRef, useState } from "react";
 import {
   View,
@@ -7,90 +6,72 @@ import {
   Pressable,
   Dimensions,
   FlatList,
+  ImageBackground,
+  Image,
   type ViewToken,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { BrushBackground } from "../components/ui/BrushBackground";
+import { LinearGradient } from "expo-linear-gradient";
 
-const { width, height } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 const Colors = {
-  primary: "#FFC220",
-  black: "#000000",
+  primary: "#FF6300",
   white: "#FFFFFF",
-  backgroundSplash: "#FFC220",
-  textPrimary: "#000000",
-  textMuted: "#BDBDBD",
-  buttonPrimary: "#000000",
-};
-
-const Spacing = {
-  sm: 8,
-  md: 12,
-  lg: 20,
-  xl: 32,
-};
-
-const Typography = {
-  xs: 12,
-  sm: 13,
-  base: 15,
-  lg: 17,
-  xl: 20,
-  "2xl": 24,
-  "3xl": 28,
-  "4xl": 34,
-};
-
-const BorderRadius = {
-  sm: 8,
+  black: "#000000",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#E5E7EB",
 };
 
 interface Slide {
   id: string;
-  lines: string[];
+  title: string;
   description: string;
+  image: any;
 }
 
 const slides: Slide[] = [
   {
     id: "1",
-    lines: ["Bringing", "Happiness with", "delicious food is", "our goal."],
-    description: "",
+    title: "Get inspired",
+    description: "Discover delicious recipes and stunning food stories.",
+    image: require("../assets/images/board1.jpg"),
   },
   {
     id: "2",
-    lines: ["Scan &", "Explore"],
-    description:
-      "Simply scan the QR code at your table to instantly access the complete menu on your device",
+    title: "Scan & Explore",
+    description: "Instantly access the complete menu on your device.",
+    image: require("../assets/images/board2.jpg"),
   },
   {
     id: "3",
-    lines: ["Browse", "Menus"],
-    description:
-      "Discover detailed dish descriptions, prices, and beautiful photos to make the perfect choice",
+    title: "Order easily",
+    description: "Make the perfect choice and order directly from your phone.",
+    image: require("../assets/images/board3.jpg"),
   },
 ];
-
-const WAVE_START_PERCENT = 0.55;
-const PLATE_SIZE = width * 0.65;
 
 export default function SplashScreen() {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList<Slide>>(null);
 
-  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    if (viewableItems.length > 0 && viewableItems[0].index !== null) {
-      setCurrentIndex(viewableItems[0].index!);
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index !== null) {
+        setCurrentIndex(viewableItems[0].index!);
+      }
     }
-  }).current;
+  ).current;
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
   }).current;
+
+  const handleSkip = () => {
+    router.replace("/login");
+  };
 
   const handleNext = () => {
     if (currentIndex < slides.length - 1) {
@@ -99,45 +80,29 @@ export default function SplashScreen() {
         animated: true,
       });
     } else {
-      router.push("/login");
+      router.replace("/login");
     }
   };
 
-  const handlePrevious = () => {
-    if (currentIndex > 0) {
-      flatListRef.current?.scrollToIndex({
-        index: currentIndex - 1,
-        animated: true,
-      });
-    }
+  const renderSlide = ({ item }: { item: Slide }) => {
+    return (
+      <ImageBackground
+        source={item.image}
+        style={styles.slide}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.92)"]}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+      </ImageBackground>
+    );
   };
-
-  const renderSlide = ({ item }: { item: Slide }) => (
-    <View style={styles.slide}>
-      <SafeAreaView style={styles.topSection}>
-        <View style={styles.topBar}>
-          <Text style={styles.brandName}>QRAVE</Text>
-        </View>
-
-        <View style={styles.textContainer}>
-          {item.lines.map((line, lineIndex) => (
-            <Text key={lineIndex} style={styles.title}>
-              {line}
-            </Text>
-          ))}
-
-          {item.description ? (
-            <Text style={styles.description}>{item.description}</Text>
-          ) : null}
-        </View>
-      </SafeAreaView>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
-      <BrushBackground />
-
+      {/* ── SWIPEABLE BACKGROUND SLIDES ── */}
       <FlatList
         ref={flatListRef}
         data={slides}
@@ -148,27 +113,46 @@ export default function SplashScreen() {
         showsHorizontalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        style={styles.flatList}
+        bounces={false}
+        initialNumToRender={3}
         getItemLayout={(_, index) => ({
-          length: width,
-          offset: width * index,
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * index,
           index,
         })}
-        bounces={false}
-        scrollEventThrottle={16}
-        decelerationRate="fast"
+        style={StyleSheet.absoluteFillObject}
       />
 
-      <View pointerEvents="box-none" style={styles.overlayContainer}>
-        <View pointerEvents="none" style={styles.heroImageWrapper}>
-          <Image
-            source={require("../assets/images/splash-hero.png")}
-            style={styles.heroImage}
-            contentFit="contain"
-          />
+      {/* ── OVERLAY UI (Logo, Skip, Text, Dots, Button) ── */}
+      <SafeAreaView style={styles.safeArea} pointerEvents="box-none">
+        {/* Top Header */}
+        <View style={styles.header}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require("../assets/images/logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+              accessibilityLabel="QRAVE Logo"
+            />
+          </View>
+          <View style={styles.skipContainer}>
+            <Pressable onPress={handleSkip} hitSlop={15}>
+              <Text style={styles.skipText}>Skip</Text>
+            </Pressable>
+          </View>
         </View>
 
-        <SafeAreaView edges={["bottom"]} style={styles.bottomSection} pointerEvents="box-none">
+        {/* Spacer pushes footer to bottom */}
+        <View style={{ flex: 1 }} pointerEvents="none" />
+
+        {/* Slide text */}
+        <View style={styles.textContainer} pointerEvents="none">
+          <Text style={styles.title}>{slides[currentIndex].title}</Text>
+          <Text style={styles.description}>{slides[currentIndex].description}</Text>
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
           <View style={styles.indicatorContainer}>
             {slides.map((_, index) => (
               <View
@@ -183,30 +167,18 @@ export default function SplashScreen() {
 
           <Pressable
             style={styles.primaryButton}
-            onPress={() => router.push("/login")}
+            onPress={handleNext}
+            accessibilityRole="button"
+            accessibilityLabel={
+              currentIndex === slides.length - 1 ? "Get Started" : "Next"
+            }
           >
-            <Text style={styles.primaryButtonText}>Phone number or email</Text>
+            <Text style={styles.primaryButtonText}>
+              {currentIndex === slides.length - 1 ? "Get started" : "Next"}
+            </Text>
           </Pressable>
-
-          <View style={styles.navRow}>
-            {currentIndex > 0 ? (
-              <Pressable style={styles.navButton} onPress={handlePrevious}>
-                <Text style={styles.prevText}>{"<- Previous"}</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.navButton} />
-            )}
-
-            <Pressable style={styles.navButton} onPress={handleNext}>
-              <Text style={styles.nextText}>
-                {currentIndex === slides.length - 1
-                  ? "Get Started ->"
-                  : "Next ->"}
-              </Text>
-            </Pressable>
-          </View>
-        </SafeAreaView>
-      </View>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -214,134 +186,92 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.backgroundSplash,
-  },
-  flatList: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 2,
+    backgroundColor: Colors.black,
   },
   slide: {
-    width: width,
-    height: height,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
   },
-  topSection: {
+  safeArea: {
     flex: 1,
-  },
-  topBar: {
-    paddingTop: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    alignItems: "center",
-  },
-  brandName: {
-    fontSize: Typography["4xl"],
-    fontWeight: "800",
-    color: Colors.textPrimary,
-    letterSpacing: 2,
-  },
-  textContainer: {
-    paddingHorizontal: Spacing.lg,
-    marginTop: Spacing.md,
-  },
-  title: {
-    fontSize: Typography["3xl"],
-    fontWeight: "800",
-    color: Colors.textPrimary,
-    lineHeight: Typography["3xl"] * 1.3,
-  },
-  description: {
-    fontSize: Typography.xl,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-    lineHeight: Typography.xl * 1.4,
-    marginTop: Spacing.md,
-  },
-  overlayContainer: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 5,
   },
-  heroImageWrapper: {
-    position: "absolute",
-    top: height * WAVE_START_PERCENT - PLATE_SIZE / 2,
-    left: (width - PLATE_SIZE) / 2,
-    width: PLATE_SIZE,
-    height: PLATE_SIZE,
-    zIndex: 5,
-  },
-  heroImage: {
+  header: {
     width: "100%",
-    height: "100%",
+    height: 80,
+    position: "relative",
   },
-  bottomSection: {
+  logoContainer: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    left: -70,
+    top: 1,
+  },
+  logoImage: {
+    width: 250,
+    height: 90,
+  },
+  skipContainer: {
+    position: "absolute",
+    right: 24,
+    top: 35,
+  },
+  skipText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.white,
+  },
+  textContainer: {
+    paddingHorizontal: 30,
+    paddingBottom: 12,
     alignItems: "center",
-    zIndex: 10,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: Colors.textPrimary,
+    textAlign: "center",
+    marginBottom: 12,
+    letterSpacing: -0.5,
+  },
+  description: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  footer: {
+    paddingHorizontal: 30,
+    paddingBottom: 20,
+    gap: 20,
   },
   indicatorContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    gap: Spacing.sm,
+    gap: 8,
   },
   indicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.textMuted,
+    backgroundColor: "rgba(255,255,255,0.4)",
   },
   indicatorActive: {
     width: 24,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.white,
   },
   primaryButton: {
-    backgroundColor: Colors.buttonPrimary,
-    paddingVertical: Spacing.md + 4,
-    paddingHorizontal: Spacing.xl * 1.5,
-    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.primary,
+    borderRadius: 30,
+    paddingVertical: 16,
     alignItems: "center",
-    width: "100%",
-    maxWidth: 300,
   },
   primaryButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
     color: Colors.white,
-    fontWeight: "600",
-    fontSize: Typography.base,
-  },
-  navRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-    marginTop: Spacing.md,
-    paddingHorizontal: Spacing.md,
-  },
-  navButton: {
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    minWidth: 80,
-  },
-  prevText: {
-    color: Colors.textPrimary,
-    fontWeight: "500",
-    fontSize: Typography.base,
-  },
-  nextText: {
-    color: Colors.textPrimary,
-    fontWeight: "600",
-    fontSize: Typography.base,
-    textAlign: "right",
   },
 });

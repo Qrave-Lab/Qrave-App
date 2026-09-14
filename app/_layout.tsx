@@ -2,8 +2,16 @@
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { NotificationProvider } from "../contexts/NotificationContext";
-import { Platform } from "react-native";
+import { Platform, LogBox } from "react-native";
 import Constants from "expo-constants";
+
+LogBox.ignoreLogs([
+  "Cannot connect to expo cli",
+  "Cannot connect to Expo CLI",
+  "cannot connect to expo cli",
+  "Cannot connect to Metro",
+  "Console warning"
+]);
 
 export default function Layout() {
   useEffect(() => {

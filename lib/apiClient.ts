@@ -160,8 +160,14 @@ async function request(path: string, opts: RequestOptions = {}): Promise<unknown
 
   let res = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include',
+    cache: 'no-store',
     ...opts,
-    headers,
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      ...headers,
+    },
   });
 
   // On 401, try a single refresh attempt then retry the original request once.
@@ -172,8 +178,14 @@ async function request(path: string, opts: RequestOptions = {}): Promise<unknown
       const retryHeaders: Record<string, string> = { ...(opts.headers || {}), ...(newToken ? { Authorization: `Bearer ${newToken}` } : {}) };
       res = await fetch(`${BASE_URL}${path}`, {
         credentials: 'include',
+        cache: 'no-store',
         ...opts,
-        headers: retryHeaders,
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          ...retryHeaders,
+        },
       });
     } else {
       const err: ApiError = new Error('Unauthorized') as ApiError;

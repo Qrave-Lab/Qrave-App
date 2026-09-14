@@ -50,9 +50,6 @@ export const supabase: SupabaseClient | null = hasSupabaseConfig
         autoRefreshToken: true,
         detectSessionInUrl: false,
         flowType: authFlowType,
-        lock: processLock,
-        // @ts-expect-error lockAcquireTimeout is a valid option in supabase-js v2
-        lockAcquireTimeout: 20000,
       },
     })
   : null;

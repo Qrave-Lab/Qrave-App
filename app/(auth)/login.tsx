@@ -1,50 +1,109 @@
-﻿// @ts-nocheck
-// app/login.js
+// @ts-nocheck
+// app/(auth)/login.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialIcons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, {
-    Circle,
-    Defs,
-    LinearGradient,
-    Path,
-    Stop,
-} from "react-native-svg";
+import Svg, { Path, Circle, Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
+
+// Welcome screen: Elegant top and bottom semi-circles
+const WelcomeTopArt = () => (
+  <View style={{ position: "absolute", top: 0, left: 0, right: 0 }} pointerEvents="none">
+    <Svg width={width} height={180} viewBox={`0 0 ${width} 180`}>
+      <Path
+        d={`M0 0 L${width} 0 L${width} 100 Q${width / 2} 190 0 100 Z`}
+        fill="#FF6300"
+        fillOpacity={0.12}
+      />
+      <Path
+        d={`M0 0 L${width} 0 L${width} 80 Q${width / 2} 160 0 80 Z`}
+        fill="#FF6300"
+        fillOpacity={0.08}
+      />
+    </Svg>
+  </View>
+);
+
+const WelcomeBottomArt = () => (
+  <View style={{ position: "absolute", bottom: 0, left: 0, right: 0 }} pointerEvents="none">
+    <Svg width={width} height={150} viewBox={`0 0 ${width} 150`}>
+      <Path
+        d={`M0 150 L${width} 150 L${width} 50 Q${width / 2} -30 0 50 Z`}
+        fill="#FF6300"
+        fillOpacity={0.12}
+      />
+      <Path
+        d={`M0 150 L${width} 150 L${width} 70 Q${width / 2} -10 0 70 Z`}
+        fill="#FF6300"
+        fillOpacity={0.08}
+      />
+    </Svg>
+  </View>
+);
+
+// Email screen: Modern, sleek fluid waves top and bottom
+const EmailTopArt = () => (
+  <View style={{ position: "absolute", top: 0, left: 0, right: 0 }} pointerEvents="none">
+    <Svg width={width} height={180} viewBox={`0 0 ${width} 180`}>
+      <Path
+        d={`M0 0 L${width} 0 L${width} 60 C${width * 0.75} 160, ${width * 0.25} 0, 0 100 Z`}
+        fill="#FF6300"
+        fillOpacity={0.12}
+      />
+      <Path
+        d={`M0 0 L${width} 0 L${width} 40 C${width * 0.75} 130, ${width * 0.25} 10, 0 80 Z`}
+        fill="#FF6300"
+        fillOpacity={0.08}
+      />
+    </Svg>
+  </View>
+);
+
+const EmailBottomArt = () => (
+  <View style={{ position: "absolute", bottom: 0, left: 0, right: 0 }} pointerEvents="none">
+    <Svg width={width} height={130} viewBox={`0 0 ${width} 130`}>
+      <Path
+        d={`M0 130 L${width} 130 L${width} 100 C${width * 0.7} -20, ${width * 0.3} 100, 0 50 Z`}
+        fill="#FF6300"
+        fillOpacity={0.1}
+      />
+    </Svg>
+  </View>
+);
 import {
-    api,
-    login as apiLogin,
-    persistAuthFromResponse,
-    BASE_URL,
+  api,
+  login as apiLogin,
+  persistAuthFromResponse,
+  BASE_URL,
 } from "../../lib/apiClient";
 import { syncBackendSessionForGoogleUser } from "../../lib/googleBackendBridge";
 import { clearSupabasePkceState, supabase } from "../../lib/supabaseClient";
 
 const { width, height } = Dimensions.get("window");
-const THEME_COLOR = "#F4B400";
-const THEME_DARK = "#E5A800";
+const THEME_COLOR = "#FF6300";
 
 try {
   WebBrowser.maybeCompleteAuthSession();
 } catch {}
 
-// By targeting "login", Expo Router stays on this screen and doesn't unmount it.
 const SUPABASE_REDIRECT = "adminorderapp://login";
 console.log("SUPABASE_REDIRECT:", SUPABASE_REDIRECT);
 
@@ -86,46 +145,8 @@ const isGoogleAuthCallbackUrl = (url: string) => {
   return Boolean(code || accessToken || error);
 };
 
-const EmailIcon = ({ color = "#999" }) => (
+const EyeIcon = ({ open = false, color = "#999" }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
-      stroke={color}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M22 6l-10 7L2 6"
-      stroke={color}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
-
-const LockIcon = ({ color = "#999" }) => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2z"
-      stroke={color}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M7 11V7a5 5 0 0110 0v4"
-      stroke={color}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
-
-const EyeIcon = ({ open, color = "#999" }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
     {open ? (
       <>
         <Path
@@ -135,7 +156,13 @@ const EyeIcon = ({ open, color = "#999" }) => (
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={2} />
+        <Path
+          d="M12 9a3 3 0 100 6 3 3 0 000-6z"
+          stroke={color}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </>
     ) : (
       <>
@@ -162,10 +189,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [activeTab, setActiveTab] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showBranchPicker, setShowBranchPicker] = useState(false);
@@ -173,14 +197,10 @@ export default function LoginScreen() {
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [pendingRoute, setPendingRoute] = useState("/admin");
   const [isSelectingBranch, setIsSelectingBranch] = useState(false);
-
+  const [viewMode, setViewMode] = useState<"welcome" | "email">("welcome");
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
-  const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
 
-  const buttonScale = useRef(new Animated.Value(1)).current;
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-  const cardTranslateY = useRef(new Animated.Value(30)).current;
   const authSessionInProgressRef = useRef(false);
   const oauthExchangePromisesRef = useRef(new Map());
   const oauthExchangeResultsRef = useRef(new Map());
@@ -190,9 +210,9 @@ export default function LoginScreen() {
     try {
       const stored = await AsyncStorage.getItem(GOOGLE_AUTH_INTENT_KEY);
       if (stored === "signup" || stored === "login") return stored;
-      return activeTab === "signup" ? "signup" : "login";
+      return "login";
     } catch {
-      return activeTab === "signup" ? "signup" : "login";
+      return "login";
     }
   };
 
@@ -297,7 +317,6 @@ export default function LoginScreen() {
     loadGoogleAuthError();
   }, []);
 
-  // Listen for OAuth callbacks that arrive through native deep linking.
   useEffect(() => {
     const handleDeepLink = async ({ url }) => {
       if (!supabase || !isGoogleAuthCallbackUrl(url)) return;
@@ -330,47 +349,7 @@ export default function LoginScreen() {
       if (url) handleDeepLink({ url });
     });
     return () => sub.remove();
-  }, [activeTab]);
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(cardOpacity, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.spring(cardTranslateY, {
-        toValue: 0,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [cardOpacity, cardTranslateY]);
-
-  const handleTabPress = (tab) => {
-    setActiveTab(tab);
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setError("");
-  };
-
-  const handlePressIn = () => {
-    Animated.spring(buttonScale, {
-      toValue: 0.96,
-      useNativeDriver: true,
-      friction: 5,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(buttonScale, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 5,
-    }).start();
-  };
+  }, []);
 
   const roleToRoute = (role) => {
     const normalized = String(role || "").toLowerCase();
@@ -391,9 +370,7 @@ export default function LoginScreen() {
         api.get("/api/admin/locations"),
         api.get("/api/admin/branches?include_archived=0"),
       ]);
-      const locations = Array.isArray(locRes?.locations)
-        ? locRes.locations
-        : [];
+      const locations = Array.isArray(locRes?.locations) ? locRes.locations : [];
       if (locations.length <= 1) {
         router.replace(target);
         return;
@@ -456,9 +433,7 @@ export default function LoginScreen() {
   };
 
   const doLogin = async () => {
-    const normalizedEmail = String(email || "")
-      .trim()
-      .toLowerCase();
+    const normalizedEmail = String(email || "").trim().toLowerCase();
     if (!normalizedEmail || !password) {
       setError("Please enter email and password");
       return;
@@ -506,87 +481,6 @@ export default function LoginScreen() {
     }
   };
 
-  const doSignup = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedEmail || !password || !confirmPassword) {
-      setError("Please fill all fields");
-      return;
-    }
-    if (!normalizedEmail.includes("@")) {
-      setError("Enter a valid email");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
-    setIsLoading(true);
-    setError("");
-    try {
-      const restaurantName = normalizedEmail.includes("@")
-        ? normalizedEmail.split("@")[0]
-        : "Qrave Restaurant";
-
-      const emailCheckRes = await fetch(`${BASE_URL}/auth/email_available`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail }),
-      });
-
-      if (!emailCheckRes.ok) {
-        const body = await emailCheckRes.text().catch(() => "");
-        throw new Error(body || "Unable to validate email");
-      }
-
-      const emailCheck = await emailCheckRes.json().catch(() => ({}));
-      if (emailCheck?.available === false) {
-        throw new Error("This email is already registered");
-      }
-
-      const otpRes = await fetch(`${BASE_URL}/public/otp/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail }),
-      });
-      if (!otpRes.ok) {
-        const body = await otpRes.text().catch(() => "");
-        throw new Error(body || "Failed to send verification code");
-      }
-
-      await AsyncStorage.setItem(
-        "pending_signup",
-        JSON.stringify({
-          email: normalizedEmail,
-          password,
-          restaurant_name: restaurantName,
-          restaurant_currency: "INR",
-        }),
-      );
-
-      router.push({ pathname: "/verify", params: { email: normalizedEmail } });
-    } catch (err) {
-      const msg = err?.message || "Signup failed";
-      setError(String(msg));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = () => {
-    if (activeTab === "login") {
-      doLogin();
-      return;
-    }
-    doSignup();
-  };
-
-  // Handle Google auth using Supabase session user data
   const handleSupabaseGoogleUser = async (
     user,
     intentOverride,
@@ -599,7 +493,6 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
-      // Clear any previous auth tokens
       await AsyncStorage.multiRemove([
         "qrave_jwt",
         "qrave_refresh",
@@ -625,13 +518,7 @@ export default function LoginScreen() {
 
       if (!result.ok) {
         handledGoogleUsersRef.current.delete(handledKey);
-        if (intent === "login") {
-          setError(
-            "No account found with this Google account. Please sign up first.",
-          );
-        } else {
-          setError(result.message || "Google sign-up failed");
-        }
+        setError(result.message || "Google sign-in failed. Please try again.");
         return;
       }
 
@@ -674,7 +561,7 @@ export default function LoginScreen() {
     authSessionInProgressRef.current = true;
     try {
       await clearSupabasePkceState();
-      const intent = activeTab === "login" ? "login" : "signup";
+      const intent = "login";
       await AsyncStorage.multiSet([
         [GOOGLE_AUTH_INTENT_KEY, intent],
         [GOOGLE_AUTH_STARTED_AT_KEY, String(Date.now())],
@@ -699,7 +586,6 @@ export default function LoginScreen() {
         return;
       }
 
-      // Capture the callback even when Android reports a cancelled auth session.
       let fallbackUrl = null;
       const linkSub = Linking.addEventListener("url", ({ url }) => {
         if (isGoogleAuthCallbackUrl(url)) {
@@ -719,21 +605,13 @@ export default function LoginScreen() {
         throw e;
       }
 
-      // Brief delay so the deep-link event can arrive if it hasn't yet
       await new Promise((r) => setTimeout(r, 600));
       linkSub?.remove();
 
       const authUrl =
         result?.type === "success" && result?.url ? result.url : fallbackUrl;
-      console.log(
-        "[GoogleAuth] result.type:",
-        result?.type,
-        "| authUrl captured:",
-        !!authUrl,
-      );
 
       if (!authUrl) {
-        // No URL: the Linking listener may have already completed the session.
         const { data: existing } = await supabase.auth.getSession();
         if (existing?.session?.user?.email) {
           await handleSupabaseGoogleUser(
@@ -777,293 +655,186 @@ export default function LoginScreen() {
     }
   };
 
-  const welcomeTitle =
-    activeTab === "login" ? "Welcome Back!" : "Create Account";
-  const welcomeSubtitle =
-    activeTab === "login"
-      ? "Sign in to continue ordering"
-      : "Join us for exclusive deals";
-
   return (
     <View style={styles.container}>
-      <View style={styles.headerBackground}>
-        <Svg
-          height={height * 0.35}
-          width={width}
-          viewBox={`0 0 ${width} ${height * 0.35}`}
-          style={styles.headerSvg}
+      {viewMode === "welcome" ? <WelcomeTopArt /> : <EmailTopArt />}
+      {viewMode === "welcome" ? <WelcomeBottomArt /> : <EmailBottomArt />}
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
         >
-          <Defs>
-            <LinearGradient
-              id="headerGradient"
-              x1="0%"
-              y1="0%"
-              x2="100%"
-              y2="100%"
+          {viewMode === "welcome" ? (
+            /* ── Welcome / social-login screen ── */
+            <ScrollView
+              contentContainerStyle={styles.scrollWelcome}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              bounces={false}
             >
-              <Stop offset="0%" stopColor={THEME_COLOR} />
-              <Stop offset="100%" stopColor={THEME_DARK} />
-            </LinearGradient>
-          </Defs>
-          <Path
-            d={`M0 0 L${width} 0 L${width} ${height * 0.28} Q${width / 2} ${height * 0.38} 0 ${height * 0.28} Z`}
-            fill="url(#headerGradient)"
-          />
-        </Svg>
-
-        <SafeAreaView style={styles.logoContainer}>
-          <Text style={styles.logoText}>QRAVE</Text>
-          <Text style={styles.tagline}>Delicious food, delivered fast</Text>
-        </SafeAreaView>
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardAvoidingView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Animated.View
-            style={[
-              styles.card,
-              {
-                opacity: cardOpacity,
-                transform: [{ translateY: cardTranslateY }],
-              },
-            ]}
-          >
-            <View style={styles.tabContainer}>
-              <Pressable
-                style={[styles.tab, activeTab === "login" && styles.activeTab]}
-                onPress={() => handleTabPress("login")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === "login" && styles.activeTabText,
-                  ]}
-                >
-                  Log In
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.tab, activeTab === "signup" && styles.activeTab]}
-                onPress={() => handleTabPress("signup")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === "signup" && styles.activeTabText,
-                  ]}
-                >
-                  Sign Up
-                </Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.welcomeTitle}>{welcomeTitle}</Text>
-            <Text style={styles.welcomeSubtitle}>{welcomeSubtitle}</Text>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-            <View style={styles.formContainer}>
-              <View
-                style={[
-                  styles.inputContainer,
-                  emailFocused && styles.inputContainerFocused,
-                ]}
-              >
-                <View style={styles.inputIcon}>
-                  <EmailIcon color={emailFocused ? THEME_COLOR : "#999"} />
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email address"
-                  placeholderTextColor="#9CA3AF"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
-                  editable={!isLoading}
+              <View style={styles.logoWrap}>
+                <Image
+                  source={require("../../assets/images/logo.png")}
+                  style={styles.logo}
+                  resizeMode="contain"
                 />
               </View>
 
-              <View
-                style={[
-                  styles.inputContainer,
-                  passwordFocused && styles.inputContainerFocused,
-                ]}
-              >
-                <View style={styles.inputIcon}>
-                  <LockIcon color={passwordFocused ? THEME_COLOR : "#999"} />
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#9CA3AF"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => setPasswordFocused(false)}
-                  editable={!isLoading}
-                />
-                <Pressable
-                  style={styles.eyeIcon}
-                  onPress={() => setShowPassword(!showPassword)}
-                  hitSlop={8}
-                >
-                  <EyeIcon
-                    open={showPassword}
-                    color={passwordFocused ? THEME_COLOR : "#999"}
-                  />
-                </Pressable>
+              <View style={styles.welcomeTextWrap}>
+                <Text style={styles.welcomeTitle}>Hey there!</Text>
+                <Text style={styles.welcomeSubtitle}>
+                  Log in or sign up for a more personalized ordering experience.
+                </Text>
               </View>
 
-              {activeTab === "signup" ? (
-                <View
-                  style={[
-                    styles.inputContainer,
-                    confirmPasswordFocused && styles.inputContainerFocused,
-                  ]}
-                >
-                  <View style={styles.inputIcon}>
-                    <LockIcon
-                      color={confirmPasswordFocused ? THEME_COLOR : "#999"}
-                    />
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Confirm Password"
-                    placeholderTextColor="#9CA3AF"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry={!showConfirmPassword}
-                    onFocus={() => setConfirmPasswordFocused(true)}
-                    onBlur={() => setConfirmPasswordFocused(false)}
-                    editable={!isLoading}
-                  />
-                  <Pressable
-                    style={styles.eyeIcon}
-                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                    hitSlop={8}
-                  >
-                    <EyeIcon
-                      open={showConfirmPassword}
-                      color={confirmPasswordFocused ? THEME_COLOR : "#999"}
-                    />
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable
-                  style={styles.forgotPassword}
-                  onPress={() => router.push("/forgot-password")}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.forgotPasswordText}>
-                    Forgot Password?
-                  </Text>
-                </Pressable>
-              )}
-
-              <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
-                <Pressable
-                  style={[
-                    styles.submitButton,
-                    isLoading && styles.submitButtonDisabled,
-                  ]}
-                  onPress={handleSubmit}
-                  onPressIn={handlePressIn}
-                  onPressOut={handlePressOut}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator color="#1f2937" />
-                  ) : (
-                    <Text style={styles.submitButtonText}>
-                      {activeTab === "login" ? "Log In" : "Create Account"}
-                    </Text>
-                  )}
-                </Pressable>
-              </Animated.View>
-
-              <View style={styles.dividerContainer}>
-                <View style={styles.divider} />
-                <Text style={styles.dividerText}>or</Text>
-                <View style={styles.divider} />
-              </View>
-
-              <View style={styles.socialContainer}>
+              <View style={styles.socialCol}>
+                {/* Google */}
                 <Pressable
                   style={({ pressed }) => [
-                    styles.socialButton,
-                    pressed && styles.socialButtonPressed,
+                    styles.socialBtn,
+                    pressed && styles.socialBtnPressed,
                   ]}
                   onPress={signInWithGoogle}
                   disabled={isLoading}
                 >
-                  <Svg width={20} height={20} viewBox="0 0 24 24">
-                    <Path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      fill="#4285F4"
-                    />
-                    <Path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-                    <Path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      fill="#FBBC05"
-                    />
-                    <Path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
+                  <Svg width={20} height={20} viewBox="0 0 24 24" style={styles.socialIcon}>
+                    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                   </Svg>
-                  <Text style={styles.socialButtonText}>Google</Text>
+                  <Text style={styles.socialBtnText}>Continue with Google</Text>
                 </Pressable>
 
+                {/* Apple */}
                 <Pressable
                   style={({ pressed }) => [
-                    styles.socialButton,
-                    styles.socialButtonApple,
-                    pressed && styles.socialButtonPressed,
+                    styles.socialBtn,
+                    pressed && styles.socialBtnPressed,
                   ]}
                 >
-                  <Svg width={20} height={20} viewBox="0 0 24 24">
-                    <Path
-                      d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"
-                      fill="#FFFFFF"
-                    />
+                  <Svg width={20} height={20} viewBox="0 0 24 24" style={styles.socialIcon}>
+                    <Path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" fill="#000000" />
                   </Svg>
-                  <Text
-                    style={[
-                      styles.socialButtonText,
-                      styles.socialButtonTextWhite,
-                    ]}
-                  >
-                    Apple
-                  </Text>
+                  <Text style={styles.socialBtnText}>Continue with Apple</Text>
+                </Pressable>
+
+                {/* Email */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.socialBtn,
+                    pressed && styles.socialBtnPressed,
+                  ]}
+                  onPress={() => setViewMode("email")}
+                >
+                  <MaterialIcons name="email" size={20} color="#000" style={styles.socialIcon} />
+                  <Text style={styles.socialBtnText}>Continue with email</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          ) : (
+            /* ── Email / password screen ── */
+            <View style={{ flex: 1 }}>
+              <View style={styles.emailHeader}>
+                <Pressable
+                  onPress={() => setViewMode("welcome")}
+                  hitSlop={15}
+                  style={styles.backBtn}
+                >
+                  <MaterialIcons name="arrow-back" size={24} color="#000" />
                 </Pressable>
               </View>
 
-              <Text style={styles.termsText}>
-                By continuing, you agree to our{" "}
-                <Text style={styles.termsLink}>Terms</Text> and{" "}
-                <Text style={styles.termsLink}>Privacy Policy</Text>
-              </Text>
+              <ScrollView
+                contentContainerStyle={styles.scrollEmail}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
+                <Text style={styles.emailPageTitle}>Continue with email</Text>
 
-              {/* No extra tab switch text; user switches via tabs */}
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                {/* Email input */}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    emailFocused && styles.inputWrapFocused,
+                  ]}
+                >
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email"
+                    placeholderTextColor="#9CA3AF"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    onFocus={() => setEmailFocused(true)}
+                    onBlur={() => setEmailFocused(false)}
+                    editable={!isLoading}
+                  />
+                </View>
+
+                {/* Password input */}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    passwordFocused && styles.inputWrapFocused,
+                  ]}
+                >
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Password"
+                    placeholderTextColor="#9CA3AF"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => setPasswordFocused(false)}
+                    editable={!isLoading}
+                  />
+                  <Pressable
+                    style={styles.eyeBtn}
+                    onPress={() => setShowPassword(!showPassword)}
+                    hitSlop={8}
+                  >
+                    <EyeIcon open={showPassword} color="#999" />
+                  </Pressable>
+                </View>
+
+                <View style={styles.linkRow}>
+                  <Pressable onPress={() => router.push("/forgot-password")}>
+                    <Text style={styles.linkText}>Forgot password</Text>
+                  </Pressable>
+                  <Pressable onPress={() => router.push("/(auth)/signup")}>
+                    <Text style={styles.linkText}>Create an account</Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
+
+              <View style={styles.bottomBtnWrap}>
+                <Pressable
+                  style={[
+                    styles.primaryBtn,
+                    isLoading && styles.primaryBtnDisabled,
+                  ]}
+                  onPress={doLogin}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Log in</Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          )}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
+      {/* Branch picker modal */}
       <Modal
         visible={showBranchPicker}
         transparent
@@ -1076,7 +847,6 @@ export default function LoginScreen() {
             <Text style={styles.branchSubtitle}>
               Select which location dashboard to open.
             </Text>
-
             <ScrollView
               style={styles.branchList}
               contentContainerStyle={{ gap: 8 }}
@@ -1103,7 +873,6 @@ export default function LoginScreen() {
                 </Pressable>
               ))}
             </ScrollView>
-
             <View style={styles.branchActionRow}>
               <Pressable
                 onPress={handleConfirmBranchSelection}
@@ -1115,7 +884,7 @@ export default function LoginScreen() {
                 ]}
               >
                 {isSelectingBranch ? (
-                  <ActivityIndicator color="#111827" />
+                  <ActivityIndicator color="#FFF" />
                 ) : (
                   <Text style={styles.branchActionText}>Open Dashboard</Text>
                 )}
@@ -1131,270 +900,170 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#FFFFFF",
   },
-  headerBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 0,
-  },
-  headerSvg: {
-    position: "absolute",
-    top: 0,
-  },
-  logoContainer: {
-    position: "absolute",
-    top: 0,
-    width: "100%",
-    alignItems: "center",
-    paddingTop: 40,
-  },
-  logoText: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#1F2937",
-    letterSpacing: 3,
-  },
-  tagline: {
-    fontSize: 12,
-    color: "#1F2937",
-    opacity: 0.8,
-    marginTop: 4,
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-    zIndex: 1,
-  },
-  scrollContent: {
+
+  /* ── Welcome screen ── */
+  scrollWelcome: {
     flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingTop: height * 0.2,
+    paddingHorizontal: 24,
     paddingBottom: 40,
+    justifyContent: "center",
   },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 30,
-    elevation: 15,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: "#F0F0F0",
-    borderRadius: 28,
-    padding: 4,
-    marginBottom: 16,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
+  logoWrap: {
     alignItems: "center",
-    borderRadius: 24,
+    marginBottom: 32,
+    marginTop: 20,
   },
-  activeTab: {
-    backgroundColor: THEME_COLOR,
-    shadowColor: THEME_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+  logo: {
+    width: 200,
+    height: 200,
   },
-  tabText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6B7280",
-  },
-  activeTabText: {
-    color: "#111827",
-    fontWeight: "700",
+  welcomeTextWrap: {
+    alignItems: "center",
+    marginBottom: 36,
   },
   welcomeTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "700",
-    color: "#111827",
-    textAlign: "center",
-    marginBottom: 4,
+    color: "#000",
+    marginBottom: 8,
   },
   welcomeSubtitle: {
-    fontSize: 13,
-    color: "#6B7280",
+    fontSize: 14,
+    color: "#717171",
     textAlign: "center",
-    marginBottom: 16,
+    lineHeight: 20,
   },
-  errorText: {
-    color: "#DC2626",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 12,
-    textAlign: "center",
+  socialCol: {
+    gap: 12,
   },
-  formContainer: {
-    gap: 14,
-  },
-  inputContainer: {
+  socialBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F6F8",
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "transparent",
-    paddingHorizontal: 16,
-    height: 54,
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+    borderRadius: 30,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    backgroundColor: "#FFF",
   },
-  inputContainerFocused: {
-    borderColor: THEME_COLOR,
-    backgroundColor: "#FFFEF8",
+  socialBtnPressed: {
+    backgroundColor: "#F5F5F5",
   },
-  inputIcon: {
+  socialIcon: {
     marginRight: 12,
+  },
+  socialBtnText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#000",
+  },
+
+  /* ── Email screen ── */
+  emailHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  backBtn: {
+    padding: 8,
+    marginLeft: -8,
+    alignSelf: "flex-start",
+  },
+  scrollEmail: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+  emailPageTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#000",
+    marginBottom: 24,
+  },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EEEEEE",
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    paddingHorizontal: 14,
+    height: 52,
+    marginBottom: 14,
+  },
+  inputWrapFocused: {
+    borderColor: THEME_COLOR,
+    backgroundColor: "#FFF",
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     color: "#111827",
     height: "100%",
   },
-  eyeIcon: {
+  eyeBtn: {
     padding: 4,
   },
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginTop: -6,
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
   },
-  forgotPasswordText: {
-    fontSize: 12,
-    color: THEME_COLOR,
+  linkText: {
+    fontSize: 14,
+    color: "#000",
     fontWeight: "600",
+    paddingVertical: 8,
   },
-  submitButton: {
-    height: 54,
+  errorText: {
+    color: "#C13515",
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 14,
+  },
+  bottomBtnWrap: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  primaryBtn: {
+    height: 52,
     backgroundColor: THEME_COLOR,
-    borderRadius: 14,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 6,
-    shadowColor: THEME_COLOR,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
   },
-  submitButtonDisabled: {
+  primaryBtnDisabled: {
     opacity: 0.7,
   },
-  submitButtonText: {
-    fontSize: 14,
+  primaryBtnText: {
+    fontSize: 16,
     fontWeight: "700",
-    color: "#111827",
-  },
-  dividerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 16,
-    gap: 12,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E5E7EB",
-  },
-  dividerText: {
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
-  socialContainer: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  socialButton: {
-    flex: 1,
-    flexDirection: "row",
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: "#F5F6F8",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  socialButtonApple: {
-    backgroundColor: "#000",
-    borderColor: "#000",
-  },
-  socialButtonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
-  },
-  socialButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  socialButtonTextWhite: {
     color: "#FFF",
   },
-  termsText: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    textAlign: "center",
-    marginTop: 12,
-    lineHeight: 16,
-  },
-  termsLink: {
-    color: THEME_COLOR,
-    fontWeight: "600",
-  },
-  registerLink: {
-    marginTop: 8,
-    alignItems: "center",
-  },
-  registerLinkText: {
-    color: "#6B7280",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  registerLinkBold: {
-    color: THEME_COLOR,
-    fontWeight: "700",
-  },
-  switchTabLink: {
-    marginTop: 6,
-    alignItems: "center",
-  },
-  switchTabText: {
-    color: "#6B7280",
-    fontSize: 12,
-    textAlign: "center",
-  },
+
+  /* ── Branch picker ── */
   branchOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
   },
   branchCard: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 10,
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
   },
   branchTitle: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#0F172A",
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 4,
   },
   branchSubtitle: {
     marginTop: 6,
@@ -1415,8 +1084,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   branchOptionActive: {
-    borderColor: "#F4B400",
-    backgroundColor: "#FFFBEB",
+    borderColor: THEME_COLOR,
+    backgroundColor: "#FFF5F0",
   },
   branchOptionText: {
     fontSize: 22,
@@ -1424,7 +1093,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   branchOptionTextActive: {
-    color: "#92400E",
+    color: "#C2410C",
   },
   branchActionRow: {
     marginTop: 18,
@@ -1434,18 +1103,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F4B400",
-    shadowColor: "#F4B400",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
+    backgroundColor: THEME_COLOR,
+    elevation: 4,
   },
   branchActionBtnDisabled: {
     opacity: 0.55,
   },
   branchActionText: {
-    color: "#111827",
+    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
   },

@@ -53,9 +53,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  tabsScroll: { maxHeight: 48 },
+  tabsScroll: { flexGrow: 0, marginBottom: 10 },
   tabsContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
@@ -257,8 +258,7 @@ export default function WaiterMenu() {
       </View>
 
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
         style={styles.tabsScroll}
         contentContainerStyle={styles.tabsContainer}
       >

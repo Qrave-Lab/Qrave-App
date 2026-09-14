@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import React, { useRef, useState } from "react";
 import {
   View,
@@ -9,16 +9,20 @@ import {
   Dimensions,
   Animated,
   ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
+import { MaterialIcons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { TopWaveArt, BottomWaveArt } from "../../components/auth/FluidWaves";
+import { BASE_URL } from "../../lib/apiClient";
 
 const { width, height } = Dimensions.get("window");
-const THEME_COLOR = "#F4B400";
-const THEME_DARK = "#E5A800";
-import { BASE_URL } from "../../lib/apiClient";
+const THEME_COLOR = "#FF6300";
 
 export default function VerifyScreen() {
   const router = useRouter();
@@ -138,116 +142,85 @@ export default function VerifyScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerBackground}>
-        <Svg
-          height={height * 0.38}
-          width={width}
-          viewBox={`0 0 ${width} ${height * 0.38}`}
-          style={styles.headerSvg}
+      <TopWaveArt />
+      <BottomWaveArt />
+
+      <Pressable onPress={() => router.back()} style={styles.backBtnOverlay}>
+        <MaterialIcons name="arrow-back-ios" size={24} color="#000000" />
+      </Pressable>
+
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingView}
         >
-          <Defs>
-            <LinearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor={THEME_COLOR} />
-              <Stop offset="100%" stopColor={THEME_DARK} />
-            </LinearGradient>
-          </Defs>
-          <Path
-            d={`M0 0 L${width} 0 L${width} ${height * 0.25}
-              C${width * 0.75} ${height * 0.32}, ${width * 0.5} ${height * 0.22}, ${width * 0.25} ${height * 0.30}
-              C0 ${height * 0.36}, 0 ${height * 0.28}, 0 ${height * 0.25} Z`}
-            fill="url(#headerGradient)"
-          />
-          <Path
-            d={`M0 ${height * 0.20}
-              Q${width * 0.25} ${height * 0.15}, ${width * 0.5} ${height * 0.22}
-              Q${width * 0.75} ${height * 0.28}, ${width} ${height * 0.18}`}
-            stroke="rgba(255,255,255,0.2)"
-            strokeWidth={2}
-            fill="none"
-          />
-        </Svg>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={styles.logoContainer}>
+              <Image source={require('../../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
+            </View>
 
-        <SafeAreaView style={styles.logoContainer}>
-          <Text style={styles.logoText}>QRAVE</Text>
-          <Text style={styles.tagline}>Verify your email</Text>
-        </SafeAreaView>
-      </View>
+            <View style={styles.contentContainer}>
+              <Text style={styles.welcomeTitle}>Enter Verification Code</Text>
+              <Text style={styles.subtitle}>
+                We've sent a 4-digit code to your email address.
+              </Text>
 
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <View style={styles.iconContainer}>
-            <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
-                stroke={THEME_COLOR}
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Path
-                d="M22 6l-10 7L2 6"
-                stroke={THEME_COLOR}
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </View>
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <Text style={styles.title}>Enter Verification Code</Text>
-          <Text style={styles.subtitle}>
-            We{"'"}ve sent a 4-digit code to your email address
-          </Text>
+              <View style={styles.otpContainer}>
+                {code.map((digit, i) => (
+                  <TextInput
+                    key={i}
+                    ref={(ref) => {
+                      inputRefs.current[i] = ref;
+                    }}
+                    style={[
+                      styles.otpBox,
+                      focusedIndex === i && styles.otpBoxFocused,
+                      digit && styles.otpBoxFilled,
+                    ]}
+                    maxLength={1}
+                    keyboardType="number-pad"
+                    value={digit}
+                    onChangeText={(t) => handleChange(t, i)}
+                    onKeyPress={(e) => handleKeyPress(e, i)}
+                    onFocus={() => setFocusedIndex(i)}
+                    onBlur={() => setFocusedIndex(null)}
+                  />
+                ))}
+              </View>
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              <View style={styles.resendContainer}>
+                <Text style={styles.resendText}>Didn't receive code? </Text>
+                <Pressable onPress={handleResend}>
+                  <Text style={styles.resendLink}>Resend</Text>
+                </Pressable>
+              </View>
 
-          <View style={styles.otpContainer}>
-            {code.map((digit, i) => (
-              <TextInput
-                key={i}
-                ref={(ref) => {
-                  inputRefs.current[i] = ref;
-                }}
-                style={[
-                  styles.otpBox,
-                  focusedIndex === i && styles.otpBoxFocused,
-                  digit && styles.otpBoxFilled,
-                ]}
-                maxLength={1}
-                keyboardType="number-pad"
-                value={digit}
-                onChangeText={(t) => handleChange(t, i)}
-                onKeyPress={(e) => handleKeyPress(e, i)}
-                onFocus={() => setFocusedIndex(i)}
-                onBlur={() => setFocusedIndex(null)}
-              />
-            ))}
-          </View>
-
-          <View style={styles.resendContainer}>
-            <Text style={styles.resendText}>Didn{"'"}t receive code? </Text>
-            <Pressable onPress={handleResend}>
-              <Text style={styles.resendLink}>Resend</Text>
-            </Pressable>
-          </View>
-
-          <Animated.View style={{ transform: [{ scale: buttonScale }], width: "100%" }}>
-            <Pressable
-              style={[styles.verifyButton, isLoading && styles.buttonDisabled]}
-              onPress={handleVerify}
-              onPressIn={handlePressIn}
-              onPressOut={handlePressOut}
-              disabled={isLoading || code.some((d) => !d)}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#111827" />
-              ) : (
-                <Text style={styles.verifyButtonText}>Verify Email</Text>
-              )}
-            </Pressable>
-          </Animated.View>
-        </View>
-      </View>
+              <Animated.View style={{ transform: [{ scale: buttonScale }], width: "100%" }}>
+                <Pressable
+                  style={[styles.verifyButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleVerify}
+                  onPressIn={handlePressIn}
+                  onPressOut={handlePressOut}
+                  disabled={isLoading || code.some((d) => !d)}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.verifyButtonText}>Verify Email</Text>
+                  )}
+                </Pressable>
+              </Animated.View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 }
@@ -255,141 +228,111 @@ export default function VerifyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#FFFFFF",
   },
-  headerBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 0,
+  keyboardAvoidingView: {
+    flex: 1,
   },
-  headerSvg: {
-    position: "absolute",
-    top: 0,
+  scrollContent: {
+    flexGrow: 1,
   },
   logoContainer: {
-    position: "absolute",
-    top: 0,
-    width: "100%",
-    alignItems: "center",
-    paddingTop: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: Dimensions.get('window').height * 0.28,
+    marginTop: 20,
   },
-  logoText: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#111827",
-    letterSpacing: 3,
+  logo: {
+    width: 160,
+    height: 160,
   },
-  tagline: {
-    fontSize: 12,
-    color: "#111827",
-    opacity: 0.8,
-    marginTop: 4,
-  },
-  cardContainer: {
+  contentContainer: {
     flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingTop: height * 0.1,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 28,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 30,
-    elevation: 15,
+  backBtnOverlay: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 6,
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#FFF9E6",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#000000",
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    marginBottom: 16,
+    fontSize: 14,
+    color: "#717171",
+    marginBottom: 24,
     lineHeight: 20,
   },
   errorText: {
-    color: "#DC2626",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 8,
+    color: "#C13515",
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 16,
   },
   otpContainer: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     gap: 12,
     marginBottom: 20,
   },
   otpBox: {
     width: 56,
     height: 56,
-    borderRadius: 14,
-    backgroundColor: "#F5F6F8",
-    borderWidth: 2,
+    borderRadius: 8,
+    backgroundColor: "#EEEEEE",
+    borderWidth: 1.5,
     borderColor: "transparent",
     textAlign: "center",
     fontSize: 20,
     fontWeight: "700",
-    color: "#111827",
+    color: "#000000",
   },
   otpBoxFocused: {
     borderColor: THEME_COLOR,
-    backgroundColor: "#FFFEF8",
+    backgroundColor: "#FFF",
   },
   otpBoxFilled: {
-    backgroundColor: "#FFF9E6",
-    borderColor: THEME_COLOR,
+    backgroundColor: "#EEEEEE",
   },
   resendContainer: {
     flexDirection: "row",
     marginBottom: 24,
   },
   resendText: {
-    fontSize: 13,
-    color: "#6B7280",
+    fontSize: 14,
+    color: "#717171",
   },
   resendLink: {
-    fontSize: 13,
-    color: THEME_COLOR,
+    fontSize: 14,
+    color: "#000000",
     fontWeight: "600",
+    textDecorationLine: "underline",
   },
   verifyButton: {
-    height: 54,
+    height: 52,
     backgroundColor: THEME_COLOR,
-    borderRadius: 14,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
-    shadowColor: THEME_COLOR,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   verifyButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

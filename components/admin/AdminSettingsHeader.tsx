@@ -28,7 +28,7 @@ export default function AdminSettingsHeader({
   subtitle,
   actionButton,
   showBack = true,
-  height = 140,
+  height = 160,
 }: Props) {
   const router = useRouter();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -104,14 +104,19 @@ const s = StyleSheet.create({
     width: "100%",
   },
   avatarBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
     overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.7)",
   },
-  avatarImg: { width: "100%", height: "100%", borderRadius: 20 },
+  avatarImg: { width: 56, height: 56, borderRadius: 28 },
   flex1: { flex: 1 },
   title: {
     fontSize: 22,

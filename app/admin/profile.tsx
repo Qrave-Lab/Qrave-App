@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
+  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
@@ -363,7 +364,7 @@ export default function AdminProfile() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8CB46" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <AdminWavyHeader height={160}>
         <View style={styles.headerTopRow}>
@@ -379,19 +380,15 @@ export default function AdminProfile() {
             )}
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Settings</Text>
-            <Text style={styles.headerSubtitle}>
-              {`${String(restaurant || "BRANCH").toUpperCase()} \u2022 ${currency}`}
-            </Text>
+            <Text style={styles.headerTitle}>{String(restaurant || "BRANCH").toUpperCase()}</Text>
+            <Text style={styles.headerSubtitle}>{currency}</Text>
           </View>
           <Pressable
             style={[
               styles.branchSelector,
               isCompact && styles.branchSelectorCompact,
             ]}
-            onPress={() =>
-              branchOptions.length > 0 && setBranchPickerOpen(true)
-            }
+            onPress={() => branchOptions.length > 0 && setBranchPickerOpen(true)}
           >
             <Text
               style={[
@@ -425,85 +422,53 @@ export default function AdminProfile() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.surfaceCard}>
-          <Text
-            style={[
-              styles.sectionTitle,
-              isCompact && styles.sectionTitleCompact,
-            ]}
-          >
-            Manage Settings
-          </Text>
-          <Text
-            style={[
-              styles.sectionSubtitle,
-              isCompact && styles.sectionSubtitleCompact,
-            ]}
-          >
-            Open a section to manage it in its own page.
-          </Text>
-
-          <View style={styles.gridWrap}>
-            {cards.map((card) => {
-              const locked = card.key === "branch" && isNewBranchLocked;
-              return (
-                <Pressable
-                  key={card.key}
+        <View style={styles.listWrap}>
+          {cards.map((card) => {
+            const locked = card.key === "branch" && isNewBranchLocked;
+            return (
+              <Pressable
+                key={card.key}
+                style={[
+                  styles.settingCard,
+                  isCompact && styles.settingCardCompact,
+                  card.danger && styles.settingCardDanger,
+                  locked && { opacity: 0.45 },
+                ]}
+                onPress={() => handleCardPress(card)}
+              >
+                <View
                   style={[
-                    styles.settingCard,
-                    isCompact && styles.settingCardCompact,
-                    columns === 3
-                      ? { width: "31.5%" }
-                      : columns === 2
-                        ? { width: "48.5%" }
-                        : { width: "100%" },
-                    card.danger && styles.settingCardDanger,
-                    locked && { opacity: 0.45 },
+                    styles.settingIconWrap,
+                    isCompact && styles.settingIconWrapCompact,
                   ]}
-                  onPress={() => handleCardPress(card)}
                 >
-                  <View
+                  <MaterialIcons
+                    name={card.icon}
+                    size={isCompact ? 22 : 24}
+                    color={card.danger ? "#B91C1C" : "#1F2937"}
+                  />
+                </View>
+                <View style={styles.settingBody}>
+                  <Text
                     style={[
-                      styles.settingIconWrap,
-                      isCompact && styles.settingIconWrapCompact,
+                      styles.settingTitle,
+                      isCompact && styles.settingTitleCompact,
+                      card.danger && styles.settingTitleDanger,
                     ]}
                   >
-                    <MaterialIcons
-                      name={card.icon as any}
-                      size={isCompact ? 20 : 22}
-                      color={card.danger ? "#B91C1C" : "#64748B"}
-                    />
-                  </View>
-                  <View style={styles.settingBody}>
-                    <Text
-                      style={[
-                        styles.settingTitle,
-                        isCompact && styles.settingTitleCompact,
-                        card.danger && styles.settingTitleDanger,
-                      ]}
-                    >
-                      {card.title}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.settingSubtitle,
-                        isCompact && styles.settingSubtitleCompact,
-                        card.muted && styles.settingSubtitleMuted,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {card.subtitle}
-                    </Text>
-                  </View>
+                    {card.title}
+                  </Text>
+                </View>
+                {locked && (
                   <MaterialIcons
-                    name={locked ? "lock" : "arrow-forward"}
+                    name="lock"
                     size={isCompact ? 20 : 22}
                     color="#94A3B8"
                   />
-                </Pressable>
-              );
-            })}
-          </View>
+                )}
+              </Pressable>
+            );
+          })}
         </View>
 
         <Pressable
@@ -604,7 +569,7 @@ export default function AdminProfile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F3F5F9",
+    backgroundColor: "#FFFFFF",
   },
   /* Header */
   headerTopRow: {
@@ -612,7 +577,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     marginBottom: 10,
   },
   profileAvatar: {
@@ -639,22 +604,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#000",
-    letterSpacing: -0.3,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   headerSubtitle: {
     fontSize: 13,
-    color: "rgba(0,0,0,0.55)",
-    fontWeight: "600",
+    color: "rgba(255,255,255,0.8)",
+    fontWeight: "500",
     marginTop: 2,
   },
   loadingWrap: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F5F9",
+    backgroundColor: "#FFFFFF",
   },
   loadingText: {
     marginTop: 8,
@@ -670,7 +634,7 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -685,7 +649,7 @@ const styles = StyleSheet.create({
   },
   branchSelectorText: {
     color: "#334155",
-    fontWeight: "700",
+    fontWeight: "600",
     fontSize: 12,
     flex: 1,
   },
@@ -693,108 +657,74 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   scrollContent: {
-    padding: 18,
-    paddingBottom: 28,
+    padding: 20,
+    paddingBottom: 48,
   },
   scrollContentCompact: {
-    padding: 10,
-    paddingBottom: 20,
+    padding: 12,
+    paddingBottom: 30,
   },
-  surfaceCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-  sectionTitleCompact: {
-    fontSize: 22,
-    lineHeight: 28,
-  },
-  sectionSubtitle: {
-    marginTop: 2,
-    fontSize: 20,
-    color: "#64748B",
-    marginBottom: 14,
-  },
-  sectionSubtitleCompact: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  gridWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 0,
+  listWrap: {
+    flexDirection: "column",
+    gap: 16,
   },
   settingCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 14,
+    borderColor: "#F1F5F9",
+    paddingVertical: 18,
+    paddingHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 104,
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOpacity: 0.03,
+    shadowRadius: 12,
     elevation: 2,
   },
   settingCardCompact: {
-    minHeight: 86,
     padding: 12,
-    borderRadius: 14,
+    borderRadius: 12,
   },
   settingCardDanger: {
     borderColor: "#FECACA",
-    backgroundColor: "#FFFBFB",
+    backgroundColor: "#FFF5F5",
   },
   settingIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#F1F5F9",
+    marginRight: 14,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
   },
   settingIconWrapCompact: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    marginRight: 10,
+    marginRight: 12,
+    width: 28,
+    height: 28,
   },
   settingBody: {
     flex: 1,
   },
   settingTitle: {
-    fontSize: 29,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "600",
     color: "#0F172A",
   },
   settingTitleCompact: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 14,
   },
   settingTitleDanger: {
-    color: "#7F1D1D",
+    color: "#B91C1C",
   },
   settingSubtitle: {
     marginTop: 2,
     color: "#64748B",
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 13,
     fontWeight: "500",
   },
   settingSubtitleCompact: {
     fontSize: 11,
-    lineHeight: 15,
   },
   settingSubtitleMuted: {
     color: "#94A3B8",
@@ -819,8 +749,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   branchTitle: {
-    fontSize: 26,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "700",
     color: "#0F172A",
   },
   branchSubtitleModal: {
@@ -847,7 +777,7 @@ const styles = StyleSheet.create({
   branchOptionText: {
     fontSize: 14,
     color: "#334155",
-    fontWeight: "700",
+    fontWeight: "600",
   },
   branchOptionTextActive: {
     color: "#92400E",
@@ -871,7 +801,7 @@ const styles = StyleSheet.create({
   branchCancelText: {
     color: "#334155",
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   branchConfirmBtn: {
     minHeight: 46,
@@ -887,47 +817,40 @@ const styles = StyleSheet.create({
   branchConfirmText: {
     color: "#111827",
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   logoutBtn: {
-    marginTop: 16,
-    backgroundColor: "#FFF",
-    borderRadius: 18,
+    marginTop: 24,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#FECACA",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    borderColor: "#FEE2E2",
+    paddingVertical: 18,
+    paddingHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
   },
   logoutBtnCompact: {
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 16,
+    borderRadius: 16,
   },
   logoutIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#FEF2F2",
+    marginRight: 12,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
   },
   logoutIconWrapCompact: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
   },
   logoutText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
     color: "#B91C1C",
+    flex: 1,
   },
   logoutTextCompact: {
     fontSize: 14,

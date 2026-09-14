@@ -772,6 +772,7 @@ export default function Inventory() {
               style={styles.subCatAddBtn}
               onPress={createSubcategory}
               disabled={creatingSub}
+              activeOpacity={0.8}
             >
               <Text style={styles.subCatAddBtnText}>
                 {creatingSub ? "..." : "Add"}
@@ -791,6 +792,7 @@ export default function Inventory() {
             <TouchableOpacity
               style={[styles.bulkBtnRed]}
               onPress={() => handleBulkStock(true)}
+              activeOpacity={0.8}
             >
               <Text style={styles.bulkBtnText}>Out of Stock</Text>
             </TouchableOpacity>
@@ -934,7 +936,15 @@ export default function Inventory() {
       />
 
       {/* ── EDIT / ADD MODAL ── */}
-      <Modal visible={!!modalMode} animationType="slide" transparent>
+      <Modal 
+        visible={!!modalMode} 
+        animationType="slide" 
+        transparent
+        onRequestClose={() => {
+          setModalMode(null);
+          setEditingItem(null);
+        }}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             {/* Golden accent bar */}
@@ -1601,15 +1611,6 @@ export default function Inventory() {
             {/* Modal Footer */}
             <View style={styles.modalFooter}>
               <TouchableOpacity
-                style={styles.discardBtn}
-                onPress={() => {
-                  setModalMode(null);
-                  setEditingItem(null);
-                }}
-              >
-                <Text style={styles.discardBtnText}>Discard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={styles.saveBtn}
                 onPress={handleSave}
                 disabled={saving}
@@ -1818,22 +1819,27 @@ const styles = StyleSheet.create({
 
   /* ── BULK BANNER ── */
   archiveBanner: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
-    marginHorizontal: 16,
+    position: "absolute",
+    bottom: 24,
+    left: 20,
+    right: 20,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    zIndex: 50,
   },
-  restoreBanner: { backgroundColor: "#1E3A8A" },
-  archiveBannerText: { color: "#F9FAFB", fontWeight: "600", fontSize: 13 },
+  restoreBanner: { borderColor: "#1E3A8A", backgroundColor: "#F0Fdfa" },
+  archiveBannerText: { color: "#111827", fontWeight: "700", fontSize: 14 },
   archiveBannerActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1860,10 +1866,10 @@ const styles = StyleSheet.create({
   },
   archiveItemsBtnText: { color: "#FFF", fontWeight: "700", fontSize: 12 },
   bannerClose: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2294,14 +2300,6 @@ const styles = StyleSheet.create({
     borderTopColor: "#FEF3C7",
     backgroundColor: "#FFFBEB",
     gap: 10,
-  },
-  discardBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#f3f4f6",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
   discardBtnText: { color: "#6b7280", fontWeight: "700" },
   saveBtn: {

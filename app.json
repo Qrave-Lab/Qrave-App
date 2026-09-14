@@ -3,6 +3,7 @@
     "name": "Qrave",
     "slug": "admin-order-app",
     "version": "1.0.0",
+    "sdkVersion": "57.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "adminorderapp",
@@ -59,7 +60,10 @@
         {
           "experimentalLauncherActivity": false
         }
-      ]
+      ],
+      "expo-image",
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import React, { useRef, useState } from "react";
 import {
   View,
@@ -9,21 +9,26 @@ import {
   Dimensions,
   Animated,
   ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
+import { MaterialIcons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { TopWaveArt, BottomWaveArt } from "../../components/auth/FluidWaves";
+import { BASE_URL } from "../../lib/apiClient";
 
 const { width, height } = Dimensions.get("window");
-const THEME_COLOR = "#F4B400";
-const THEME_DARK = "#E5A800";
-import { BASE_URL } from "../../lib/apiClient";
+const THEME_COLOR = "#FF6300";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [emailFocused, setEmailFocused] = useState(false);
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -83,101 +88,70 @@ export default function ForgotPasswordScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerBackground}>
-        <Svg
-          height={height * 0.36}
-          width={width}
-          viewBox={`0 0 ${width} ${height * 0.36}`}
-          style={styles.headerSvg}
+      <TopWaveArt />
+      <BottomWaveArt />
+
+      <Pressable onPress={() => router.back()} style={styles.backBtnOverlay}>
+        <MaterialIcons name="arrow-back-ios" size={24} color="#000000" />
+      </Pressable>
+
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingView}
         >
-          <Defs>
-            <LinearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor={THEME_COLOR} />
-              <Stop offset="100%" stopColor={THEME_DARK} />
-            </LinearGradient>
-          </Defs>
-          <Path
-            d={`M0 0 L${width} 0 L${width} ${height * 0.22} L0 ${height * 0.32} Z`}
-            fill="url(#headerGradient)"
-          />
-          <Path
-            d={`M${width * 0.7} 0 L${width} 0 L${width} ${height * 0.08} Z`}
-            fill="rgba(255,255,255,0.1)"
-          />
-          <Path
-            d={`M${width * 0.85} 0 L${width} 0 L${width} ${height * 0.04} Z`}
-            fill="rgba(255,255,255,0.08)"
-          />
-        </Svg>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={styles.logoContainer}>
+              <Image source={require('../../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
+            </View>
 
-        <SafeAreaView style={styles.logoContainer}>
-          <Text style={styles.logoText}>QRAVE</Text>
-          <Text style={styles.tagline}>Reset your password</Text>
-        </SafeAreaView>
-      </View>
+            <View style={styles.contentContainer}>
+              <Text style={styles.welcomeTitle}>Enter your email</Text>
+              <Text style={styles.subtitle}>
+                We'll send a 4-digit code to reset your password.
+              </Text>
 
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <View style={styles.iconContainer}>
-            <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
-                stroke={THEME_COLOR}
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Path
-                d="M22 6l-10 7L2 6"
-                stroke={THEME_COLOR}
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </View>
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <Text style={styles.title}>Enter your email</Text>
-          <Text style={styles.subtitle}>
-            We{"'"}ll send a 4-digit code to reset your password
-          </Text>
+              <View style={[styles.inputContainer, emailFocused && styles.inputContainerFocused]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email address"
+                  placeholderTextColor="#9CA3AF"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  editable={!isLoading}
+                />
+              </View>
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Email address"
-              placeholderTextColor="#9CA3AF"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!isLoading}
-            />
-          </View>
-
-          <Animated.View style={{ transform: [{ scale: buttonScale }], width: "100%" }}>
-            <Pressable
-              style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-              onPress={handleSendOtp}
-              onPressIn={handlePressIn}
-              onPressOut={handlePressOut}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#111827" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Send Code</Text>
-              )}
-            </Pressable>
-          </Animated.View>
-
-          <Pressable style={styles.backLink} onPress={() => router.back()}>
-            <Text style={styles.backLinkText}>â† Back to Login</Text>
-          </Pressable>
-        </View>
-      </View>
+              <Animated.View style={{ transform: [{ scale: buttonScale }], width: "100%" }}>
+                <Pressable
+                  style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleSendOtp}
+                  onPressIn={handlePressIn}
+                  onPressOut={handlePressOut}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Send Code</Text>
+                  )}
+                </Pressable>
+              </Animated.View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 }
@@ -185,125 +159,94 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#FFFFFF",
   },
-  headerBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 0,
+  keyboardAvoidingView: {
+    flex: 1,
   },
-  headerSvg: {
-    position: "absolute",
-    top: 0,
+  scrollContent: {
+    flexGrow: 1,
   },
   logoContainer: {
-    position: "absolute",
-    top: 0,
-    width: "100%",
-    alignItems: "center",
-    paddingTop: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: Dimensions.get('window').height * 0.28,
+    marginTop: 20,
   },
-  logoText: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#111827",
-    letterSpacing: 3,
+  logo: {
+    width: 160,
+    height: 160,
   },
-  tagline: {
-    fontSize: 12,
-    color: "#111827",
-    opacity: 0.8,
-    marginTop: 4,
-  },
-  cardContainer: {
+  contentContainer: {
     flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingTop: height * 0.1,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 28,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 30,
-    elevation: 15,
+  backBtnOverlay: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 6,
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#FFF9E6",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#000000",
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    marginBottom: 20,
+    fontSize: 14,
+    color: "#717171",
+    marginBottom: 24,
     lineHeight: 20,
   },
   errorText: {
-    color: "#DC2626",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 12,
+    color: "#C13515",
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 16,
   },
   inputContainer: {
     width: "100%",
-    backgroundColor: "#F5F6F8",
-    borderRadius: 14,
-    borderWidth: 2,
+    backgroundColor: "#EEEEEE",
+    borderRadius: 8,
+    borderWidth: 1.5,
     borderColor: "transparent",
-    paddingHorizontal: 16,
-    height: 54,
+    paddingHorizontal: 14,
+    height: 52,
     marginBottom: 18,
+    justifyContent: "center",
+  },
+  inputContainerFocused: {
+    borderColor: THEME_COLOR,
+    backgroundColor: "#FFF",
   },
   input: {
     flex: 1,
-    fontSize: 14,
-    color: "#111827",
+    fontSize: 15,
+    color: "#222",
     height: "100%",
   },
   primaryButton: {
-    height: 54,
+    height: 52,
     backgroundColor: THEME_COLOR,
-    borderRadius: 14,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
-    shadowColor: THEME_COLOR,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
+    marginTop: 8,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   primaryButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  backLink: {
-    marginTop: 20,
-  },
-  backLinkText: {
-    fontSize: 13,
-    color: "#6B7280",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

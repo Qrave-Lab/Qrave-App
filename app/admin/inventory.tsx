@@ -756,7 +756,7 @@ export default function Inventory() {
 
           <View style={styles.headerActions}>
             <TouchableOpacity
-              style={[styles.headerBtn, showArchived && styles.headerBtnActive]}
+              style={styles.headerBtn}
               onPress={() => {
                 setShowArchived((s) => !s);
                 clearSelection();
@@ -765,26 +765,23 @@ export default function Inventory() {
               <MaterialIcons
                 name={showArchived ? "unarchive" : "archive"}
                 size={24}
-                color={showArchived ? "#92400E" : "#333"}
+                color="#1F2937"
               />
             </TouchableOpacity>
             {canManageCategories && (
               <TouchableOpacity
-                style={[
-                  styles.headerBtn,
-                  showSubCatPopup && styles.headerBtnActive,
-                ]}
-                onPress={() => setShowSubCatPopup((s) => !s)}
+                style={styles.headerBtn}
+                onPress={() => setShowSubCatPopup(true)}
               >
                 <MaterialIcons
                   name="category"
-                  size={22}
-                  color={showSubCatPopup ? "#7C3AED" : "#333"}
+                  size={24}
+                  color="#1F2937"
                 />
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.headerBtn} onPress={openAddModal}>
-              <MaterialIcons name="add" size={24} color="#333" />
+              <MaterialIcons name="add" size={24} color="#1F2937" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1021,7 +1018,15 @@ export default function Inventory() {
       </TouchableOpacity>
 
       {/* ── EDIT / ADD MODAL ── */}
-      <Modal visible={!!modalMode} animationType="slide" transparent>
+      <Modal 
+        visible={!!modalMode} 
+        animationType="slide" 
+        transparent
+        onRequestClose={() => {
+          setModalMode(null);
+          setEditingItem(null);
+        }}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             {/* Centered Title */}
@@ -1705,24 +1710,6 @@ export default function Inventory() {
                       )}
                     </TouchableOpacity>
                   ) : null}
-                  <TouchableOpacity
-                    style={[
-                      styles.modalBtn,
-                      styles.modalBtnSecondary,
-                      !(modalMode === "edit" && editingItem?.id) &&
-                        styles.modalBtnGrow,
-                      (saving || deletingItem) && styles.modalBtnDisabled,
-                    ]}
-                    onPress={() => {
-                      setModalMode(null);
-                      setEditingItem(null);
-                    }}
-                    disabled={saving || deletingItem}
-                  >
-                    <Text style={styles.modalBtnText} numberOfLines={1}>
-                      Discard
-                    </Text>
-                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
@@ -1753,7 +1740,15 @@ export default function Inventory() {
       </Modal>
 
       {/* ── SUBCATEGORY MODAL ── */}
-      <Modal visible={showSubCatPopup} animationType="slide" transparent>
+      <Modal 
+        visible={showSubCatPopup} 
+        animationType="slide" 
+        transparent
+        onRequestClose={() => {
+          setShowSubCatPopup(false);
+          setNewSubName("");
+        }}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Add Subcategory</Text>
@@ -1793,15 +1788,6 @@ export default function Inventory() {
             />
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalBtn}
-                onPress={() => {
-                  setShowSubCatPopup(false);
-                  setNewSubName("");
-                }}
-              >
-                <Text style={styles.modalBtnText}>Discard</Text>
-              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnPrimary]}
                 onPress={async () => {
@@ -1913,14 +1899,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 48,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
     elevation: 1,
   },
   searchBar: {
@@ -1953,22 +1939,27 @@ const styles = StyleSheet.create({
 
   /* ── BULK BANNER ── */
   archiveBanner: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
-    marginHorizontal: 16,
+    position: "absolute",
+    bottom: 90,
+    left: 20,
+    right: 20,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    zIndex: 50,
   },
-  restoreBanner: { backgroundColor: "#1E3A8A" },
-  archiveBannerText: { color: "#F9FAFB", fontWeight: "600", fontSize: 13 },
+  restoreBanner: { borderColor: "#1E3A8A", backgroundColor: "#F0FDFA" },
+  archiveBannerText: { color: "#111827", fontWeight: "700", fontSize: 14 },
   archiveBannerActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1995,10 +1986,10 @@ const styles = StyleSheet.create({
   },
   archiveItemsBtnText: { color: "#FFF", fontWeight: "700", fontSize: 12 },
   bannerClose: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2021,13 +2012,16 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 10,
+    borderRadius: 16,
+    padding: 12,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
     aspectRatio: 1,
   },
   cardOutOfStock: { opacity: 0.6 },
@@ -2189,70 +2183,78 @@ const styles = StyleSheet.create({
   /* ── MODAL ── */
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    justifyContent: "flex-end", // Align to bottom
   },
   modalContent: {
-    width: "90%",
-    backgroundColor: "#FFF",
-    borderRadius: 24,
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     padding: 24,
+    paddingBottom: 40,
     shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-    maxHeight: "80%",
+    shadowOpacity: 0.15,
+    shadowRadius: 30,
+    elevation: 20,
+    maxHeight: "90%",
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 24,
+    fontWeight: "900",
     marginBottom: 20,
-    color: "#111827",
+    color: "#0F172A",
     textAlign: "center",
+    letterSpacing: -0.5,
   },
   modalTabs: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 20,
-    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 24,
   },
   modalTab: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
   },
   modalTabActive: {
-    backgroundColor: "#111827",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   modalTabText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: "#4B5563",
+    color: "#64748B",
   },
   modalTabTextActive: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFF",
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0F172A",
   },
   modalLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#374151",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: "#64748B",
     marginBottom: 8,
-    marginTop: 4,
+    marginTop: 16,
   },
   modalInput: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#111827",
+    paddingVertical: 14,
+    fontSize: 15,
+    color: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
     marginBottom: 14,
   },
   modalDropdown: {
@@ -2346,23 +2348,23 @@ const styles = StyleSheet.create({
 
   /* ── FIELDS ── */
   fieldLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1,
-    color: "#9ca3af",
-    marginBottom: 6,
-    marginTop: 12,
+    letterSpacing: 0.5,
+    color: "#64748B",
+    marginBottom: 8,
+    marginTop: 16,
   },
   fieldInput: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
-    color: "#111827",
+    color: "#0F172A",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#E2E8F0",
     marginBottom: 4,
   },
   fieldLabelSm: {

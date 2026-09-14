@@ -36,7 +36,7 @@ import {
   ActivityIndicator,
   Image,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
 import { api, BASE_URL } from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
@@ -54,6 +54,8 @@ type Table = {
   flag?: "bill" | "long" | string;
   mergedWith?: number[]; // table numbers this table is grouped with
   billGroupId?: string; // bill group UUID from backend
+  isPaid?: boolean;
+  floorName?: string;
 };
 
 /** Maps a table number â†’ its bill-group info (combined orders from all grouped tables). */
@@ -161,6 +163,7 @@ const SAMPLE_TABLES: Table[] = [
 export default function CustomizeTables() {
   const router = useRouter();
   const [filter, setFilter] = useState("all");
+  const [selectedFloor, setSelectedFloor] = useState<string>("All Floors");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"number" | "value" | "time">("number");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -173,6 +176,8 @@ export default function CustomizeTables() {
   const [mergeSource, setMergeSource] = useState<string | null>(null);
   const [mergeLoading, setMergeLoading] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [freeLoading, setFreeLoading] = useState<string | null>(null);
+  const [paidSessions, setPaidSessions] = useState<Set<string>>(new Set());
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printSource, setPrintSource] = useState<string | null>(null);
   const [paidModalOpen, setPaidModalOpen] = useState(false);
@@ -228,9 +233,10 @@ export default function CustomizeTables() {
             isActive,
             items: t.items ?? 0,
             total: "-",
-            status: "free",
+            status: (t.status === "disabled" || t.is_active === false || t.is_enabled === false) ? "disabled" : "free",
             time: t.time,
             flag: t.flag,
+            floorName: t.floor_name ? String(t.floor_name) : "Main Floor",
           };
         }),
     [],
@@ -260,6 +266,7 @@ export default function CustomizeTables() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([]);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [activeSessionTableNumbers, setActiveSessionTableNumbers] = useState<
     Set<number>
   >(new Set());
@@ -365,12 +372,15 @@ export default function CustomizeTables() {
   const tablesWithOrders = useMemo(() => {
     return tablesData.map((t) => {
       const tableNumber = getTableNumber(t);
+      if (t.status === "disabled") return { ...t, isActive: false, items: 0, total: "-" };
       if (tableNumber === undefined) return t;
       const stat = tableOrderStats.get(tableNumber);
       const bg = billGroups.get(tableNumber);
       const hasActiveSession = activeSessionTableNumbers.has(tableNumber);
 
       // If this table is in a bill group, show combined totals
+      const session = activeSessions.find((s) => Number(s.table_number) === tableNumber);
+      const isPaid = session?.session_id ? paidSessions.has(session.session_id) || (session as any)?.payment_status === "paid" : false;
       if (bg) {
         const otherTables = bg.linkedTableNumbers.filter(
           (n) => n !== tableNumber,
@@ -388,10 +398,11 @@ export default function CustomizeTables() {
           time: stat?.time || t.time,
           mergedWith: otherTables,
           billGroupId: bg.groupId,
+          isPaid,
         };
       }
 
-      if (!stat && !hasActiveSession) return t;
+      if (!stat && !hasActiveSession) return { ...t, isPaid };
       if (!stat && hasActiveSession) {
         return {
           ...t,
@@ -400,9 +411,10 @@ export default function CustomizeTables() {
           status: "occupied",
           isActive: true,
           time: t.time || "Just now",
+          isPaid,
         };
       }
-      if (!stat) return t;
+      if (!stat) return { ...t, isPaid };
       return {
         ...t,
         items: stat.items,
@@ -410,24 +422,35 @@ export default function CustomizeTables() {
         status: "occupied",
         isActive: true,
         time: stat.time || t.time,
+        isPaid,
       };
     });
-  }, [tablesData, tableOrderStats, billGroups, activeSessionTableNumbers]);
+  }, [tablesData, tableOrderStats, billGroups, activeSessionTableNumbers, activeSessions]);
 
   const tables = useMemo(() => {
     const filtered = tablesWithOrders
       .filter((t) => {
         if (filter === "occupied") return t.status === "occupied";
         if (filter === "free") return t.status === "free";
+        if (filter === "bill") return t.flag === "bill";
         return true;
       })
       .filter((t) => {
         // Search by table number or id
-        const searchStr = search.toLowerCase();
-        return (
-          (t.number && String(t.number).toLowerCase().includes(searchStr)) ||
-          t.id.toLowerCase().includes(searchStr)
-        );
+        if (search) {
+          const searchStr = search.toLowerCase();
+          const tNum = getTableNumber(t);
+          const displayedNum = padNumber(tNum);
+          if (
+            !displayedNum.toLowerCase().includes(searchStr) &&
+            !(t.number && String(t.number).toLowerCase().includes(searchStr)) &&
+            !t.id.toLowerCase().includes(searchStr)
+          ) {
+            return false;
+          }
+        }
+        if (selectedFloor !== "All Floors" && t.floorName !== selectedFloor) return false;
+        return true;
       });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -445,7 +468,7 @@ export default function CustomizeTables() {
     });
 
     return sorted;
-  }, [filter, search, sortBy, tablesWithOrders]);
+  }, [filter, search, sortBy, tablesWithOrders, selectedFloor]);
 
   const buildKitchenActivities = useCallback((ordersList: ActiveOrder[]) => {
     const next: Activity[] = [];
@@ -603,6 +626,7 @@ export default function CustomizeTables() {
         );
       }
 
+      setActiveSessions(sessionsList);
       setActiveOrders(ordersList);
       setServiceCalls(serviceCallsList);
       setActiveSessionTableNumbers(
@@ -687,10 +711,11 @@ export default function CustomizeTables() {
     const sourceTable = tablesWithOrders.find((t) => t.id === moveSource);
     if (!sourceTable) return;
     const sourceNumber = getTableNumber(sourceTable);
-    const sourceOrder = activeOrders.find(
-      (o) => sourceNumber !== undefined && o.table_number === sourceNumber,
+    
+    const sourceSession = activeSessions.find(
+      (s) => sourceNumber !== undefined && Number(s.table_number) === sourceNumber
     );
-    const sessionId = sourceOrder?.session_id;
+    const sessionId = sourceSession?.session_id || sourceSession?.id;
     if (!sessionId) {
       setMoveError("No active session to move.");
       return;
@@ -745,14 +770,14 @@ export default function CustomizeTables() {
     const targetNumber = getTableNumber(targetTable);
 
     // Find session IDs for both tables
-    const sourceOrder = activeOrders.find(
-      (o) => sourceNumber !== undefined && o.table_number === sourceNumber,
+    const sourceSession = activeSessions.find(
+      (s) => sourceNumber !== undefined && Number(s.table_number) === sourceNumber
     );
-    const targetOrder = activeOrders.find(
-      (o) => targetNumber !== undefined && o.table_number === targetNumber,
+    const targetSession = activeSessions.find(
+      (s) => targetNumber !== undefined && Number(s.table_number) === targetNumber
     );
-    const sourceSessionId = sourceOrder?.session_id;
-    const targetSessionId = targetOrder?.session_id;
+    const sourceSessionId = sourceSession?.session_id || sourceSession?.id;
+    const targetSessionId = targetSession?.session_id || targetSession?.id;
 
     if (!sourceSessionId || !targetSessionId) {
       setMergeError("Both tables must have active sessions to merge.");
@@ -785,77 +810,42 @@ export default function CustomizeTables() {
     }
   };
 
-  const handleMarkPaid = async (mode: "cash" | "card" | "upi") => {
-    if (!paidSource) return;
-    const table = tablesWithOrders.find((t) => t.id === paidSource);
+  const handleMarkPaid = async (targetTableId: string, mode: "cash" | "card" | "upi" = "cash") => {
+    if (!targetTableId) return;
+    const table = tablesWithOrders.find((t) => t.id === targetTableId);
     if (!table) return;
     const tableNumber = getTableNumber(table);
 
-    if (!restaurantId) {
-      Alert.alert("Error", "Restaurant ID not available. Try again.");
-      return;
-    }
+    const session = activeSessions.find(
+      (s) => Number(s.table_number) === tableNumber
+    );
+    const sessionId = session?.session_id || session?.id;
 
-    // If table is in a bill group, pay ALL orders from the group
-    const bg =
-      tableNumber !== undefined ? billGroups.get(tableNumber) : undefined;
-    let ordersToPay: { orderId: string; items: ActiveOrderItem[] }[] = [];
-
-    if (bg && bg.allOrderIds.length > 0) {
-      // Bill group: pay every order across all merged tables
-      for (const oid of bg.allOrderIds) {
-        const matchOrder = activeOrders.find(
-          (o) => (o.id || o.order_id) === oid,
-        );
-        ordersToPay.push({ orderId: oid, items: matchOrder?.items || [] });
-      }
-    } else {
-      // No bill group: pay only this table's orders
-      const tableOrders =
-        tableNumber !== undefined
-          ? activeOrders.filter((o) => o.table_number === tableNumber)
-          : [];
-      ordersToPay = tableOrders
-        .map((o) => ({
-          orderId: String(o.id || o.order_id || ""),
-          items: o.items || [],
-        }))
-        .filter((o) => o.orderId);
-    }
-
-    if (ordersToPay.length === 0) {
-      Alert.alert("No Orders", "No active orders found for this table.");
+    if (!sessionId) {
+      Alert.alert("Error", "No active session found for this table.");
       return;
     }
 
     setPaidLoading(true);
     try {
-      for (const { orderId, items } of ordersToPay) {
-        // Get order breakdown for accurate total
-        let amount = 0;
-        try {
-          const breakdown: any = await api.get(
-            `/api/admin/orders/${orderId}/breakdown`,
-          );
-          amount = breakdown?.Total ?? breakdown?.total ?? 0;
-        } catch {
-          // Fallback: calculate from items
-          amount = items.reduce(
-            (sum, i) =>
-              sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
-            0,
-          );
+      let total = 0;
+      const tableOrders = tableNumber !== undefined ? activeOrders.filter((o) => o.table_number === tableNumber) : [];
+      for (const order of tableOrders) {
+        for (const item of order.items || []) {
+          total += (Number(item.price) || 0) * (Number(item.quantity) || 0);
         }
-
-        await api.post("/api/payments/pay", {
-          order_id: orderId,
-          restaurant_id: restaurantId,
-          amount,
-          mode,
-        });
       }
 
-      // Clear bill group tracking for all linked tables
+      await api.post(`/api/admin/payments/status`, {
+        session_id: sessionId,
+        status: "paid",
+        payment_mode: mode,
+        reason: "staff_mark_paid",
+        amount: Number(total.toFixed(2)),
+      });
+
+      const bg = tableNumber !== undefined ? billGroups.get(tableNumber) : undefined;
+
       if (bg) {
         setBillGroups((prev) => {
           const next = new Map(prev);
@@ -866,16 +856,28 @@ export default function CustomizeTables() {
         });
       }
 
+      setPaidSessions((prev) => {
+        const next = new Set(prev);
+        if (sessionId) next.add(sessionId);
+        if (bg) {
+          bg.linkedTableNumbers.forEach((tNum) => {
+            const s = activeSessions.find((s) => Number(s.table_number) === tNum);
+            if (s?.session_id) next.add(s.session_id);
+          });
+        }
+        return next;
+      });
+
       await Promise.all([loadTables(), refreshActivities()]);
       setPaidModalOpen(false);
       setPaidSource(null);
 
       const paidLabel = bg
-        ? `Tables T${bg.linkedTableNumbers.join(", T")} are now paid and cleared (${mode}).`
-        : `Table T${tableNumber} marked as paid (${mode}).`;
+        ? `Tables T${bg.linkedTableNumbers.join(", T")} are now marked paid.`
+        : `Table T${tableNumber} marked as paid.`;
       Alert.alert("Success", paidLabel);
     } catch (e: any) {
-      Alert.alert("Payment Failed", e?.message || "Could not process payment.");
+      Alert.alert("Payment Failed", e?.body?.message || e?.message || "Could not process payment.");
     } finally {
       setPaidLoading(false);
     }
@@ -895,6 +897,38 @@ export default function CustomizeTables() {
           text: "Free Table",
           style: "destructive",
           onPress: async () => {
+            setFreeLoading(tableId);
+
+            const session = activeSessions.find(
+              (s) => Number(s.table_number) === tableNumber
+            );
+            const sessionId = session?.session_id || session?.id;
+
+            if (sessionId) {
+              const bg = tableNumber !== undefined ? billGroups.get(tableNumber) : undefined;
+              const sessionsToEnd = new Set<string>();
+              if (bg) {
+                bg.linkedTableNumbers.forEach((tNum) => {
+                  const s = activeSessions.find((s) => Number(s.table_number) === tNum);
+                  if (s?.session_id || s?.id) sessionsToEnd.add(s.session_id || s.id);
+                });
+              } else {
+                sessionsToEnd.add(sessionId);
+              }
+
+              try {
+                await Promise.all(
+                  Array.from(sessionsToEnd).map((id) =>
+                    api.post(`/api/admin/sessions/${id}/end`)
+                  )
+                );
+              } catch (e: any) {
+                Alert.alert("Error", e?.body?.message || e?.message || "Failed to free table.");
+                setFreeLoading(null);
+                return; // Stop here, do not update UI if backend rejected
+              }
+            }
+
             // Update local state immediately
             setTablesData((prev) =>
               prev.map((t) =>
@@ -973,11 +1007,34 @@ export default function CustomizeTables() {
   const isServiceVisible = (a: Activity) =>
     a.channel === "service" && a.status !== "done";
 
+  const uniqueFloors = useMemo(() => {
+    const floors = Array.from(new Set(tablesData.map((t) => t.floorName))).filter(Boolean) as string[];
+    return floors;
+  }, [tablesData]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([loadTables(), refreshActivities()]);
     setRefreshing(false);
   }, [loadTables, refreshActivities]);
+
+  // Poll for updates when the screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const timer = setInterval(() => {
+        if (isActive) {
+          Promise.all([loadTables(), refreshActivities()]).catch(() => {});
+        }
+      }, 15000); // Poll every 15 seconds
+
+      return () => {
+        isActive = false;
+        clearInterval(timer);
+      };
+    }, [loadTables, refreshActivities])
+  );
 
   /* â”€â”€ Computed values â”€â”€ */
   const pendingOrders = activeOrders.filter(
@@ -1014,7 +1071,7 @@ export default function CustomizeTables() {
 
   return (
     <View style={styles.mainContainer}>
-      {/* â”€â”€ Wavy Header â”€â”€ */}
+      {/* ── Wavy Header ── */}
       <AdminWavyHeader height={160}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity
@@ -1065,7 +1122,7 @@ export default function CustomizeTables() {
         </View>
       </AdminWavyHeader>
 
-      {/* â”€â”€ Main Scroll Body â”€â”€ */}
+      {/* ── Main Scroll Body ── */}
       <ScrollView
         style={styles.scrollBody}
         contentContainerStyle={styles.scrollContent}
@@ -1091,7 +1148,7 @@ export default function CustomizeTables() {
           </View>
         )}
 
-        {/* â”€â”€ Metrics Row â”€â”€ */}
+        {/* ── Metrics Row ── */}
         <View style={styles.metricsRow}>
           <TouchableOpacity
             style={styles.metricCard}
@@ -1146,7 +1203,7 @@ export default function CustomizeTables() {
           </View>
         </View>
 
-        {/* â”€â”€ Sort Pills (toggle) â”€â”€ */}
+        {/* ── Sort Pills (toggle) ── */}
         {sortMenuOpen && (
           <View style={styles.sortMenu}>
             <Text style={styles.sortMenuLabel}>SORT BY</Text>
@@ -1178,82 +1235,149 @@ export default function CustomizeTables() {
           </View>
         )}
 
-        {/* â”€â”€ Filter Tabs â”€â”€ */}
+        {/* ── Filter Tabs ── */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filtersScroll}
-          contentContainerStyle={{ paddingHorizontal: 16 }}
+          contentContainerStyle={{ paddingHorizontal: 16, flexDirection: 'column' }}
         >
-          <TouchableOpacity
-            style={[
-              styles.filterChip,
-              filter === "all" && styles.filterChipActive,
-            ]}
-            onPress={() => setFilter("all")}
-          >
-            <MaterialIcons
-              name="grid-view"
-              size={14}
-              color={filter === "all" ? "#FFF" : "#6B7280"}
-              style={{ marginRight: 4 }}
-            />
-            <Text
+          {uniqueFloors.length > 1 && (
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+              <TouchableOpacity
+                onPress={() => setSelectedFloor("All Floors")}
+                style={[
+                  styles.filterChip,
+                  selectedFloor === "All Floors" && styles.filterChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedFloor === "All Floors" && styles.filterChipTextActive,
+                  ]}
+                >
+                  All Floors
+                </Text>
+              </TouchableOpacity>
+              {uniqueFloors.map((floor) => (
+                <TouchableOpacity
+                  key={floor}
+                  onPress={() => setSelectedFloor(floor)}
+                  style={[
+                    styles.filterChip,
+                    selectedFloor === floor && styles.filterChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      selectedFloor === floor && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {floor.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
               style={[
-                styles.filterChipText,
-                filter === "all" && styles.filterChipTextActive,
+                styles.filterChip,
+                filter === "all" && styles.filterChipActive,
               ]}
+              onPress={() => setFilter("all")}
             >
-              All Tables
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterChip,
-              filter === "occupied" && styles.filterChipActive,
-            ]}
-            onPress={() => setFilter("occupied")}
-          >
-            <MaterialIcons
-              name="people"
-              size={14}
-              color={filter === "occupied" ? "#FFF" : "#6B7280"}
-              style={{ marginRight: 4 }}
-            />
-            <Text
+              <MaterialIcons
+                name="grid-view"
+                size={14}
+                color={filter === "all" ? "#FFF" : "#6B7280"}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filter === "all" && styles.filterChipTextActive,
+                ]}
+              >
+                All Tables
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
               style={[
-                styles.filterChipText,
-                filter === "occupied" && styles.filterChipTextActive,
+                styles.filterChip,
+                filter === "occupied" && styles.filterChipActive,
               ]}
+              onPress={() => setFilter("occupied")}
             >
-              Occupied({occupiedTableCount})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterChip,
-              filter === "free" && styles.filterChipActive,
-            ]}
-            onPress={() => setFilter("free")}
-          >
-            <MaterialIcons
-              name="event-available"
-              size={14}
-              color={filter === "free" ? "#FFF" : "#6B7280"}
-              style={{ marginRight: 4 }}
-            />
-            <Text
+              <MaterialIcons
+                name="people"
+                size={14}
+                color={filter === "occupied" ? "#FFF" : "#6B7280"}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filter === "occupied" && styles.filterChipTextActive,
+                ]}
+              >
+                Occupied({occupiedTableCount})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[
-                styles.filterChipText,
-                filter === "free" && styles.filterChipTextActive,
+                styles.filterChip,
+                filter === "free" && styles.filterChipActive,
               ]}
+              onPress={() => setFilter("free")}
             >
-              Available({freeTableCount})
-            </Text>
-          </TouchableOpacity>
+              <MaterialIcons
+                name="event-available"
+                size={14}
+                color={filter === "free" ? "#FFF" : "#6B7280"}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filter === "free" && styles.filterChipTextActive,
+                ]}
+              >
+                Available({freeTableCount})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                filter === "bill" && styles.filterChipActive,
+              ]}
+              onPress={() => setFilter("bill")}
+            >
+              <MaterialIcons
+                name="receipt"
+                size={14}
+                color={filter === "bill" ? "#FFF" : "#6B7280"}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.filterChipText,
+                  filter === "bill" && styles.filterChipTextActive,
+                ]}
+              >
+                Bill Requested
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
 
-        {/* â”€â”€ Table Grid â”€â”€ */}
+        {/* ── Table Grid ── */}
         <View style={styles.tablesGrid}>
           {tables.map((item) => {
             const tNum = getTableNumber(item);
@@ -1266,9 +1390,11 @@ export default function CustomizeTables() {
                 key={item.id}
                 style={[
                   styles.tableCard,
-                  isFree && styles.tableCardFree,
-                  !isFree && !isBillReq && styles.tableCardOccupied,
+                  item.status === "disabled" && { backgroundColor: "#f1f5f9", opacity: 0.6 },
+                  isFree && item.status !== "disabled" && styles.tableCardFree,
+                  !isFree && !isBillReq && item.status !== "disabled" && styles.tableCardOccupied,
                   isBillReq && styles.tableCardBill,
+                  item.isPaid ? styles.tablePaid : null,
                 ]}
                 activeOpacity={isFree ? 1 : 0.7}
                 onPress={() => {
@@ -1287,9 +1413,11 @@ export default function CustomizeTables() {
                       {
                         backgroundColor: isFree
                           ? "#F3F4F6"
-                          : isBillReq
-                            ? "#FEF2F2"
-                            : "#ECFDF5",
+                          : item.isPaid
+                            ? "#D1FAE5"
+                            : isBillReq
+                              ? "#FEF2F2"
+                              : "#ECFDF5",
                       },
                     ]}
                   >
@@ -1299,13 +1427,15 @@ export default function CustomizeTables() {
                         {
                           color: isFree
                             ? "#9CA3AF"
-                            : isBillReq
-                              ? "#EF4444"
-                              : "#059669",
+                            : item.isPaid
+                              ? "#059669"
+                              : isBillReq
+                                ? "#EF4444"
+                                : "#059669",
                         },
                       ]}
                     >
-                      {isFree ? "FREE" : isBillReq ? "Bill Req" : "SEATED"}
+                      {isFree ? "FREE" : item.isPaid ? "PAID" : isBillReq ? "Bill Req" : "SEATED"}
                     </Text>
                   </View>
                 </View>
@@ -1314,7 +1444,7 @@ export default function CustomizeTables() {
                 {bg && bg.linkedTableNumbers.length > 1 && (
                   <View style={styles.mergedBadge}>
                     <Text style={styles.mergedBadgeText}>
-                      ðŸ”— T
+                      🔗 T
                       {bg.linkedTableNumbers
                         .filter((n) => n !== tNum)
                         .join(", T")}
@@ -1322,7 +1452,16 @@ export default function CustomizeTables() {
                   </View>
                 )}
 
-                {isFree ? (
+                {item.status === "disabled" ? (
+                  <View style={styles.emptyStateContainer}>
+                    <MaterialIcons
+                      name="block"
+                      size={32}
+                      color="#D1D5DB"
+                    />
+                    <Text style={styles.availableText}>Not in use</Text>
+                  </View>
+                ) : isFree ? (
                   /* Free table empty state */
                   <View style={styles.emptyStateContainer}>
                     <MaterialIcons
@@ -1360,9 +1499,9 @@ export default function CustomizeTables() {
           })}
         </View>
       </ScrollView>
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      {/* ═════════════════════════════════════════════════════════════════════ 
          TABLE ACTION BOTTOM SHEET
-         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+         ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={actionSheetOpen}
         transparent
@@ -1378,18 +1517,26 @@ export default function CustomizeTables() {
           />
           <View style={styles.bottomSheet}>
             <View style={styles.sheetHeader}>
-              <View>
-                <Text style={styles.sheetTitle}>
-                  Table{" "}
-                  {actionTableNumber !== undefined
-                    ? padNumber(actionTableNumber)
-                    : "?"}{" "}
-                  - Manage Order
-                </Text>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <Text style={styles.sheetTitle}>
+                    Table{" "}
+                    {actionTableNumber !== undefined
+                      ? padNumber(actionTableNumber)
+                      : "?"}
+                    {" - "}Manage Order
+                  </Text>
+                  {actionTable?.isPaid ? (
+                    <View style={{ backgroundColor: "#d1fae5", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <MaterialIcons name="check-circle" size={12} color="#059669" />
+                      <Text style={{ color: "#059669", fontSize: 11, fontWeight: "800" }}>PAID</Text>
+                    </View>
+                  ) : null}
+                </View>
                 {actionTableBg &&
                   actionTableBg.linkedTableNumbers.length > 1 && (
                     <Text style={styles.sheetSubtitle}>
-                      ðŸ”— Merged with T
+                      🔗 Merged with T
                       {actionTableBg.linkedTableNumbers
                         .filter((n) => n !== actionTableNumber)
                         .join(", T")}
@@ -1436,8 +1583,9 @@ export default function CustomizeTables() {
                 style={[styles.actionBtnStyle, styles.actionBtnPrimary]}
                 onPress={() => {
                   setActionSheetOpen(false);
-                  setPaidSource(actionTableId);
-                  setPaidModalOpen(true);
+                  if (actionTableId) {
+                    handleMarkPaid(actionTableId, "cash");
+                  }
                 }}
               >
                 <MaterialIcons name="payments" size={24} color="#047857" />
@@ -1495,9 +1643,9 @@ export default function CustomizeTables() {
         </View>
       </Modal>
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      {/* ═════════════════════════════════════════════════════════════════════ 
          ACTIVITY BOTTOM SHEET
-         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+         ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={activitySheetOpen}
         transparent
@@ -1711,9 +1859,9 @@ export default function CustomizeTables() {
         </View>
       </Modal>
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      {/* ═════════════════════════════════════════════════════════════════════ 
          MERGE MODAL
-         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+         ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={mergeModalOpen}
         transparent
@@ -1791,9 +1939,9 @@ export default function CustomizeTables() {
         </View>
       </Modal>
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      {/* ═════════════════════════════════════════════════════════════════════ 
          MOVE MODAL
-         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+         ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={moveModalOpen}
         transparent
@@ -1861,9 +2009,9 @@ export default function CustomizeTables() {
         </View>
       </Modal>
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      {/* ═════════════════════════════════════════════════════════════════════ 
          PRINT MODAL
-         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+         ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={printModalOpen}
         transparent
@@ -1912,9 +2060,9 @@ export default function CustomizeTables() {
         </View>
       </Modal>
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+      {/* ═════════════════════════════════════════════════════════════════════ 
          MARK AS PAID MODAL
-         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+         ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={paidModalOpen}
         transparent
@@ -1974,7 +2122,7 @@ export default function CustomizeTables() {
                   {bg && (
                     <View style={[styles.mergedBadge, { marginBottom: 8 }]}>
                       <Text style={styles.mergedBadgeText}>
-                        ðŸ”— Combined bill with T
+                        🔗 Combined bill with T
                         {bg.linkedTableNumbers
                           .filter((n) => n !== tblNumber)
                           .join(", T")}
@@ -1982,7 +2130,7 @@ export default function CustomizeTables() {
                     </View>
                   )}
                   <Text style={{ marginBottom: 4, color: "#6B7280" }}>
-                    {tbl ? `${tbl.items} items â€¢ ${tbl.total}` : ""}
+                    {tbl ? `${tbl.items} items • ${tbl.total}` : ""}
                   </Text>
                   {bg ? (
                     <Text
@@ -2068,9 +2216,9 @@ export default function CustomizeTables() {
   );
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* ═════════════════════════════════════════════════════════════════════ 
    STYLES
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   ═════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
   mainContainer: {
@@ -2078,7 +2226,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
 
-  /* â”€â”€ HEADER â”€â”€ */
+  /* ── HEADER ── */
   headerTopRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2154,7 +2302,7 @@ const styles = StyleSheet.create({
     color: "#FFF",
   },
 
-  /* â”€â”€ SEARCH â”€â”€ */
+  /* ── SEARCH ── */
   searchBarWrap: {
     paddingHorizontal: 16,
     marginBottom: 16,
@@ -2163,12 +2311,16 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 46,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 50,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 1,
   },
   searchInput: {
     flex: 1,
@@ -2189,7 +2341,7 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
   },
 
-  /* â”€â”€ SCROLL BODY â”€â”€ */
+  /* ── SCROLL BODY ── */
   scrollBody: {
     flex: 1,
   },
@@ -2198,7 +2350,7 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
 
-  /* â”€â”€ METRICS â”€â”€ */
+  /* ── METRICS ── */
   metricsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2207,14 +2359,16 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     width: "23%",
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    paddingVertical: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   metricIcon: {
@@ -2237,7 +2391,7 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
   },
 
-  /* â”€â”€ SORT â”€â”€ */
+  /* ── SORT ── */
   sortMenu: {
     marginHorizontal: 16,
     backgroundColor: "#FFF",
@@ -2279,7 +2433,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  /* â”€â”€ FILTERS â”€â”€ */
+  /* ── FILTERS ── */
   filtersScroll: {
     marginBottom: 14,
   },
@@ -2308,7 +2462,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  /* â”€â”€ TABLE GRID â”€â”€ */
+  /* ── TABLE GRID ── */
   tablesGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2317,34 +2471,40 @@ const styles = StyleSheet.create({
   },
   tableCard: {
     width: "48%",
-    backgroundColor: "#FFF",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
-    marginBottom: 14,
-    borderWidth: 1.2,
-    borderColor: "#F0F0F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.03,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   tableCardFree: {
-    opacity: 0.55,
-    backgroundColor: "#FAFAFA",
+    opacity: 0.7,
+    backgroundColor: "#FFFFFF",
     borderStyle: "dashed" as any,
-    borderColor: "#D5D5D5",
+    borderColor: "#CBD5E1",
+    shadowOpacity: 0,
+    elevation: 0,
   },
   tableCardOccupied: {
-    borderColor: "#FDE68A",
-    backgroundColor: "#FFFDF5",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.12,
-    elevation: 4,
+    borderColor: "#F4B400",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#F4B400",
+    shadowOpacity: 0.08,
+    elevation: 3,
   },
   tableCardBill: {
-    borderColor: "#FCA5A5",
-    backgroundColor: "#FEF2F2",
+    borderLeftColor: "#38BDF8",
+    backgroundColor: "#F0FAFF",
+  },
+  tablePaid: {
+    borderTopWidth: 4,
+    borderTopColor: "#10b981",
   },
   tableCardHeader: {
     flexDirection: "row",

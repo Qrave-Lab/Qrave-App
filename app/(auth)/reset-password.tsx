@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import React, { useRef, useState } from "react";
 import {
   View,
@@ -10,13 +10,16 @@ import {
   Animated,
   ActivityIndicator,
   ScrollView,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
+import { MaterialIcons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width, height } = Dimensions.get("window");
-const THEME_COLOR = "#F4B400";
+const THEME_COLOR = "#FF6300";
 const THEME_DARK = "#E5A800";
 import { BASE_URL } from "../../lib/apiClient";
 
@@ -40,7 +43,7 @@ const LockIcon = ({ color = "#999" }) => (
 );
 
 const EyeIcon = ({ open, color = "#999" }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     {open ? (
       <>
         <Path
@@ -173,163 +176,162 @@ export default function ResetPasswordScreen() {
   const passwordsMatch =
     newPassword && confirmPassword && newPassword === confirmPassword;
 
-  if (isSuccess) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.successContainer}>
-          <Animated.View
-            style={[
-              styles.successIconContainer,
-              { transform: [{ scale: successScale }] },
-            ]}
-          >
-            <View style={styles.successIconInner}>
-              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M20 6L9 17l-5-5"
-                  stroke="#fff"
-                  strokeWidth={3}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </View>
-          </Animated.View>
-          <Text style={styles.successTitle}>Password Reset!</Text>
-          <Text style={styles.successSubtitle}>Redirecting to login...</Text>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      <View style={styles.headerBackground}>
-        <Svg
-          height={height * 0.34}
-          width={width}
-          viewBox={`0 0 ${width} ${height * 0.34}`}
-          style={styles.headerSvg}
+      <Pressable onPress={() => router.back()} style={styles.backBtnOverlay}>
+        <MaterialIcons name="arrow-back-ios" size={24} color="#000000" />
+      </Pressable>
+
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingView}
         >
-          <Defs>
-            <LinearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor={THEME_COLOR} />
-              <Stop offset="100%" stopColor={THEME_DARK} />
-            </LinearGradient>
-          </Defs>
-          <Path
-            d={`M0 0 L${width} 0 L${width} ${height * 0.18}
-              Q${width * 0.8} ${height * 0.28}, ${width * 0.4} ${height * 0.24}
-              Q0 ${height * 0.20}, 0 ${height * 0.26} Z`}
-            fill="url(#headerGradient)"
-          />
-          <Path
-            d={`M${width + 50} ${height * 0.05}
-              A ${height * 0.15} ${height * 0.15} 0 0 1 ${width - height * 0.15} ${height * 0.20}`}
-            fill="rgba(255,255,255,0.08)"
-          />
-        </Svg>
-
-        <SafeAreaView style={styles.logoContainer}>
-          <Text style={styles.logoText}>QRAVE</Text>
-          <Text style={styles.tagline}>Create new password</Text>
-        </SafeAreaView>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Reset Password</Text>
-          <Text style={styles.subtitle}>
-            Create a strong password for your account
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>New Password</Text>
-            <View style={[styles.inputContainer, newPasswordFocused && styles.inputContainerFocused]}>
-              <View style={styles.inputIcon}>
-                <LockIcon color={newPasswordFocused ? THEME_COLOR : "#999"} />
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter new password"
-                placeholderTextColor="#9CA3AF"
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry={!showNewPassword}
-                onFocus={() => setNewPasswordFocused(true)}
-                onBlur={() => setNewPasswordFocused(false)}
-              />
-              <Pressable
-                style={styles.eyeIcon}
-                onPress={() => setShowNewPassword(!showNewPassword)}
-                hitSlop={8}
-              >
-                <EyeIcon open={showNewPassword} color={newPasswordFocused ? THEME_COLOR : "#999"} />
-              </Pressable>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={styles.logoContainer}>
+              <Image source={require('../../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
             </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <View
-              style={[
-                styles.inputContainer,
-                confirmPasswordFocused && styles.inputContainerFocused,
-                confirmPassword && !passwordsMatch && styles.inputContainerError,
-              ]}
-            >
-              <View style={styles.inputIcon}>
-                <LockIcon
-                  color={
-                    confirmPasswordFocused
-                      ? THEME_COLOR
-                      : confirmPassword && !passwordsMatch
-                      ? "#FF5252"
-                      : "#999"
-                  }
-                />
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Confirm new password"
-                placeholderTextColor="#9CA3AF"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-                onFocus={() => setConfirmPasswordFocused(true)}
-                onBlur={() => setConfirmPasswordFocused(false)}
-              />
-              <Pressable
-                style={styles.eyeIcon}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                hitSlop={8}
-              >
-                <EyeIcon open={showConfirmPassword} color={confirmPasswordFocused ? THEME_COLOR : "#999"} />
-              </Pressable>
-            </View>
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            {confirmPassword && !passwordsMatch ? (
-              <Text style={styles.errorText}>Passwords do not match</Text>
-            ) : null}
-          </View>
-
-          <Animated.View style={{ transform: [{ scale: buttonScale }], width: "100%", marginTop: 8 }}>
-            <Pressable
-              style={[styles.resetButton, (isLoading || !passwordsMatch) && styles.buttonDisabled]}
-              onPress={handleReset}
-              onPressIn={handlePressIn}
-              onPressOut={handlePressOut}
-              disabled={isLoading || !passwordsMatch}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#111827" />
+            
+            <View style={styles.contentContainer}>
+              {isSuccess ? (
+                <Animated.View
+                  style={[
+                    styles.successContainer,
+                    { transform: [{ scale: successScale }] },
+                  ]}
+                >
+                  <MaterialIcons name="check-circle" size={80} color="#34A853" />
+                  <Text style={styles.successTitle}>Password Reset!</Text>
+                  <Text style={styles.successSubtitle}>
+                    You can now log in with your new password.
+                  </Text>
+                  <Pressable
+                    style={styles.primaryButton}
+                    onPress={() => router.replace("/(auth)/login")}
+                  >
+                    <Text style={styles.primaryButtonText}>Back to Log In</Text>
+                  </Pressable>
+                </Animated.View>
               ) : (
-                <Text style={styles.resetButtonText}>Reset Password</Text>
+                <>
+                  <Text style={styles.welcomeTitle}>Create New Password</Text>
+                  <Text style={styles.subtitle}>
+                    Enter a new password for your account.
+                  </Text>
+
+                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                  <View
+                    style={[
+                      styles.inputContainer,
+                      newPasswordFocused && styles.inputContainerFocused,
+                    ]}
+                  >
+                    <View style={styles.inputIcon}>
+                      <LockIcon
+                        color={newPasswordFocused ? THEME_COLOR : "#999"}
+                      />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="New password"
+                      placeholderTextColor="#9CA3AF"
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                      secureTextEntry={!showNewPassword}
+                      onFocus={() => setNewPasswordFocused(true)}
+                      onBlur={() => setNewPasswordFocused(false)}
+                      editable={!isLoading}
+                    />
+                    <Pressable
+                      style={styles.eyeIcon}
+                      onPress={() => setShowNewPassword(!showNewPassword)}
+                      hitSlop={8}
+                    >
+                      <EyeIcon
+                        open={showNewPassword}
+                        color={newPasswordFocused ? THEME_COLOR : "#999"}
+                      />
+                    </Pressable>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.inputContainer,
+                      confirmPasswordFocused && styles.inputContainerFocused,
+                      newPassword && confirmPassword && newPassword !== confirmPassword && styles.inputContainerError,
+                    ]}
+                  >
+                    <View style={styles.inputIcon}>
+                      <LockIcon
+                        color={confirmPasswordFocused ? THEME_COLOR : "#999"}
+                      />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Confirm new password"
+                      placeholderTextColor="#9CA3AF"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry={!showConfirmPassword}
+                      onFocus={() => setConfirmPasswordFocused(true)}
+                      onBlur={() => setConfirmPasswordFocused(false)}
+                      editable={!isLoading}
+                    />
+                    <Pressable
+                      style={styles.eyeIcon}
+                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      hitSlop={8}
+                    >
+                      <EyeIcon
+                        open={showConfirmPassword}
+                        color={confirmPasswordFocused ? THEME_COLOR : "#999"}
+                      />
+                    </Pressable>
+                  </View>
+
+                  <Animated.View
+                    style={{ transform: [{ scale: buttonScale }], width: "100%" }}
+                  >
+                    <Pressable
+                      style={[
+                        styles.primaryButton,
+                        (isLoading ||
+                          !newPassword ||
+                          !confirmPassword ||
+                          newPassword !== confirmPassword) &&
+                          styles.buttonDisabled,
+                      ]}
+                      onPress={handleReset}
+                      onPressIn={handlePressIn}
+                      onPressOut={handlePressOut}
+                      disabled={
+                        isLoading ||
+                        !newPassword ||
+                        !confirmPassword ||
+                        newPassword !== confirmPassword
+                      }
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.primaryButtonText}>
+                          Reset Password
+                        </Text>
+                      )}
+                    </Pressable>
+                  </Animated.View>
+                </>
               )}
-            </Pressable>
-          </Animated.View>
-        </View>
-      </ScrollView>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 }
@@ -337,132 +339,111 @@ export default function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#FFFFFF",
   },
-  headerBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 0,
-  },
-  headerSvg: {
-    position: "absolute",
-    top: 0,
-  },
-  logoContainer: {
-    position: "absolute",
-    top: 0,
-    width: "100%",
-    alignItems: "center",
-    paddingTop: 44,
-  },
-  logoText: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#111827",
-    letterSpacing: 3,
-  },
-  tagline: {
-    fontSize: 12,
-    color: "#111827",
-    opacity: 0.8,
-    marginTop: 4,
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingTop: height * 0.15,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: height * 0.25,
+    marginTop: 20,
+  },
+  logo: {
+    width: 160,
+    height: 160,
+  },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: 24,
     paddingBottom: 40,
   },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 30,
-    elevation: 15,
+  backBtnOverlay: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 6,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
-    textAlign: "center",
-    marginBottom: 4,
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#000000",
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
+    fontSize: 14,
+    color: "#717171",
     marginBottom: 24,
+    lineHeight: 20,
   },
   inputGroup: {
     marginBottom: 16,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
-    color: "#111827",
+    color: "#222",
     marginBottom: 8,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F6F8",
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "transparent",
-    paddingHorizontal: 16,
-    height: 54,
+    backgroundColor: "#EEEEEE",
+    borderRadius: 8,
+    borderWidth: 0,
+    paddingHorizontal: 14,
+    height: 52,
+    marginBottom: 16,
   },
   inputContainerFocused: {
-    borderColor: THEME_COLOR,
-    backgroundColor: "#FFFEF8",
+    backgroundColor: "#E2E2E2",
   },
   inputContainerError: {
-    borderColor: "#FF5252",
-    backgroundColor: "#FFF5F5",
+    borderWidth: 1,
+    borderColor: "#C13515",
   },
   inputIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   input: {
     flex: 1,
-    fontSize: 14,
-    color: "#111827",
+    fontSize: 15,
+    color: "#222",
     height: "100%",
   },
   eyeIcon: {
     padding: 4,
   },
   errorText: {
-    fontSize: 11,
-    color: "#FF5252",
-    fontWeight: "600",
+    fontSize: 13,
+    color: "#C13515",
+    fontWeight: "500",
     marginTop: 6,
   },
   resetButton: {
-    height: 54,
+    height: 52,
     backgroundColor: THEME_COLOR,
-    borderRadius: 14,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: THEME_COLOR,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
+    marginTop: 8,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   resetButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   successContainer: {
     flex: 1,

@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -13,15 +13,15 @@ import {
   ScrollView,
   Linking,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
-import { syncBackendSessionForGoogleUser } from "../../lib/googleBackendBridge";
+import { MaterialIcons } from "@expo/vector-icons";
 
 const { width, height } = Dimensions.get("window");
-const THEME_COLOR = "#F4B400";
+const THEME_COLOR = "#FF6300";
 const THEME_DARK = "#E5A800";
 import { BASE_URL } from "../../lib/apiClient";
 
@@ -369,48 +369,44 @@ export default function SetupScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerBackground}>
-        <Svg
-          height={height * 0.28}
-          width={width}
-          viewBox={`0 0 ${width} ${height * 0.28}`}
-          style={styles.headerSvg}
+    <View style={{ flex: 1, backgroundColor: '#F7F7F7' }}>
+      <Image 
+        source={require('../../assets/images/board3.jpg')} 
+        style={{ width: '100%', height: height * 0.45, position: 'absolute', top: 0 }} 
+        resizeMode="cover" 
+      />
+      
+      <Pressable onPress={() => router.back()} style={styles.backBtnOverlay}>
+        <MaterialIcons name="arrow-back-ios" size={20} color="#FFF" />
+      </Pressable>
+
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingView}
         >
-          <Defs>
-            <LinearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor={THEME_COLOR} />
-              <Stop offset="100%" stopColor={THEME_DARK} />
-            </LinearGradient>
-          </Defs>
-          <Path
-            d={`M0 0 L${width} 0 L${width} ${height * 0.21} Q${width / 2} ${height * 0.30} 0 ${height * 0.21} Z`}
-            fill="url(#headerGradient)"
-          />
-        </Svg>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={{ height: height * 0.35 }} />
+            
+            <View style={styles.bottomSheet}>
+              <View style={styles.progressContainer}>
+                <ProgressStep step={1} currentStep={setupStep === 1 ? 3 : 4} label="Verify" />
+                <View style={styles.progressLine} />
+                <ProgressStep step={2} currentStep={setupStep === 1 ? 3 : 4} label="Details" />
+                <View style={styles.progressLine} />
+                <ProgressStep step={3} currentStep={setupStep === 1 ? 3 : 4} label="Plan" />
+                <View style={styles.progressLine} />
+                <ProgressStep step={4} currentStep={setupStep === 1 ? 3 : 4} label="Setup" />
+              </View>
 
-        <SafeAreaView style={styles.logoContainer}>
-          <Image source={require("../../assets/images/logo.png")} style={styles.logoImage} resizeMode="contain" />
-        </SafeAreaView>
-      </View>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.progressContainer}>
-          <ProgressStep step={1} currentStep={setupStep === 1 ? 3 : 4} label="Verify" />
-          <View style={styles.progressLine} />
-          <ProgressStep step={2} currentStep={setupStep === 1 ? 3 : 4} label="Details" />
-          <View style={styles.progressLine} />
-          <ProgressStep step={3} currentStep={setupStep === 1 ? 3 : 4} label="Plan" />
-          <View style={styles.progressLine} />
-          <ProgressStep step={4} currentStep={setupStep === 1 ? 3 : 4} label="Setup" />
-        </View>
-
-        <Animated.View style={[styles.card, { opacity: cardOpacity, transform: [{ translateY: cardTranslateY }] }]}>
-          <View style={styles.iconContainer}>
-            <StoreIcon size={32} color={THEME_COLOR} />
-          </View>
-
-          <Text style={styles.title}>Tell us about your business</Text>
+              <Animated.View style={[styles.content, { opacity: cardOpacity, transform: [{ translateY: cardTranslateY }] }]}>
+          <Text style={styles.welcomeTitle}>Tell us about your business</Text>
           <Text style={styles.subtitle}>This helps us customize your experience</Text>
 
           {setupStep === 1 ? (
@@ -527,132 +523,170 @@ export default function SetupScreen() {
                 </Animated.View>
               </View>
             </>
-          )}
-        </Animated.View>
-      </ScrollView>
-    </View>
-  );
+              )}
+            </Animated.View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8F9FA" },
-  headerBackground: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 0 },
-  headerSvg: { position: "absolute", top: 0 },
-  logoContainer: { position: "absolute", top: 0, width: "100%", alignItems: "center", paddingTop: 28 },
-  logoImage: { width: 140, height: 72 },
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  bottomSheet: {
+    flex: 1,
+    backgroundColor: "#F7F7F7",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
+    minHeight: height * 0.65,
+  },
+  backBtnOverlay: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 6,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  backBtn: {
+    padding: 4,
+    paddingLeft: 8,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#222",
+  },
+  dividerFull: {
+    height: 1,
+    backgroundColor: "#EBEBEB",
+    width: "100%",
+  },
   scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: height * 0.13, paddingBottom: 40 },
+  scrollContent: { paddingBottom: 40, paddingTop: 16 },
   progressContainer: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", marginBottom: 20, paddingHorizontal: 12 },
   progressLine: { flex: 0.5, height: 2, backgroundColor: "#4CAF50", marginTop: 15 },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 25,
-    elevation: 12,
+  content: {
+    paddingHorizontal: 24,
   },
-  iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#FFF9E6",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    marginBottom: 16,
-  },
-  title: { fontSize: 20, fontWeight: "800", color: "#111827", textAlign: "center", marginBottom: 4 },
-  subtitle: { fontSize: 13, color: "#6B7280", textAlign: "center", marginBottom: 24 },
+  welcomeTitle: { fontSize: 26, fontWeight: "600", color: "#222", marginBottom: 8 },
+  subtitle: { fontSize: 14, color: "#717171", marginBottom: 24, lineHeight: 20 },
   section: { marginBottom: 24 },
   sectionHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   sectionIcon: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "#FFF9E6",
+    backgroundColor: "#F7F7F7",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
   },
-  sectionTitle: { fontSize: 15, fontWeight: "600", color: "#111827" },
-  sectionHint: { fontSize: 12, color: "#6B7280", marginBottom: 12, marginLeft: 42 },
+  sectionTitle: { fontSize: 15, fontWeight: "600", color: "#222" },
+  sectionHint: { fontSize: 13, color: "#717171", marginBottom: 12, marginLeft: 42 },
   inputContainer: {
-    backgroundColor: "#F5F6F8",
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "transparent",
-    paddingHorizontal: 16,
-    height: 54,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#B0B0B0",
+    paddingHorizontal: 14,
+    height: 52,
   },
-  inputContainerFocused: { borderColor: THEME_COLOR, backgroundColor: "#FFFEF8" },
-  input: { flex: 1, fontSize: 15, color: "#111827", height: "100%" },
+  inputContainerFocused: { borderColor: "#222", borderWidth: 2 },
+  input: { flex: 1, fontSize: 15, color: "#222", height: "100%" },
   timeRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   timeBlock: { flex: 1 },
-  timeLabel: { fontSize: 11, color: "#9CA3AF", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
+  timeLabel: { fontSize: 12, color: "#717171", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
   timeInput: {
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: "#F5F6F8",
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#B0B0B0",
     textAlign: "center",
     fontSize: 16,
     fontWeight: "700",
-    color: "#111827",
+    color: "#222",
   },
   timeDivider: { paddingTop: 20 },
   timeDividerText: { fontSize: 20, color: "#9CA3AF" },
   completeButton: {
-    height: 56,
+    height: 52,
     backgroundColor: THEME_COLOR,
-    borderRadius: 14,
+    borderRadius: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    shadowColor: THEME_COLOR,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
+    marginTop: 8,
   },
-  buttonDisabled: { opacity: 0.5 },
-  completeButtonText: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  buttonDisabled: { opacity: 0.7 },
+  completeButtonText: { fontSize: 16, fontWeight: "600", color: "#FFFFFF" },
   preset: {
     flex: 1,
     height: 44,
-    borderRadius: 12,
-    backgroundColor: "#F5F6F8",
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#B0B0B0",
   },
-  presetActive: { backgroundColor: "#FFF9E6", borderColor: THEME_COLOR },
-  presetText: { fontSize: 14, fontWeight: "600", color: "#6B7280" },
-  presetTextActive: { color: "#111827" },
+  presetActive: { backgroundColor: "#222", borderColor: "#222" },
+  presetText: { fontSize: 14, fontWeight: "600", color: "#222" },
+  presetTextActive: { color: "#FFFFFF" },
   customInput: {
     width: 60,
     height: 40,
-    borderRadius: 10,
-    backgroundColor: "#F5F6F8",
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#B0B0B0",
     textAlign: "center",
     fontSize: 16,
     fontWeight: "700",
-    color: "#111827",
+    color: "#222",
   },
   planCard: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 14,
+    borderColor: "#B0B0B0",
+    borderRadius: 8,
     padding: 14,
     backgroundColor: "#FFFFFF",
     marginBottom: 10,
     flexDirection: "row",
     alignItems: "center",
   },
-  planCardActive: { borderColor: THEME_COLOR, backgroundColor: "#FFF9E6" },
+  planCardActive: { borderColor: "#222", backgroundColor: "#F7F7F7", borderWidth: 2 },
   planTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
   planAmount: { fontSize: 13, fontWeight: "600", color: "#374151", marginTop: 2 },
   planHint: { fontSize: 11, color: "#6B7280", marginTop: 3 },
@@ -667,15 +701,15 @@ const styles = StyleSheet.create({
   },
   statusMessage: { color: "#6B7280", fontSize: 12, marginBottom: 10 },
   actionsRow: { flexDirection: "row", gap: 10, marginTop: 6, alignItems: "center" },
-  backBtn: {
-    height: 56,
+  backBtnBackBtn: {
+    height: 52,
     width: 90,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 14,
+    borderColor: "#B0B0B0",
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fff",
   },
-  backBtnText: { color: "#4B5563", fontWeight: "700", fontSize: 13 },
+  backBtnText: { color: "#222", fontWeight: "700", fontSize: 16 },
 });

@@ -19,7 +19,7 @@
  * @returns {JSX.Element} The waiter floor screen.
  */
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   ScrollView,
   View,
@@ -34,6 +34,9 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Keyboard,
+  TouchableWithoutFeedback,
+  Platform,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { ThemedText, type ThemedTextProps } from "../../components/common/ThemedText";
@@ -195,6 +198,8 @@ export default function CustomizeTables() {
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [paidSessions, setPaidSessions] = useState<Set<string>>(new Set());
   const [selectedFloor, setSelectedFloor] = useState<string>("All Floors");
+  const [floorModalOpen, setFloorModalOpen] = useState<boolean>(false);
+  const [filterModalOpen, setFilterModalOpen] = useState<boolean>(false);
 
   const [restaurantId, setRestaurantId] = useState<string>("");
   const [billGroups, setBillGroups] = useState<Map<number, BillGroupInfo>>(
@@ -204,6 +209,16 @@ export default function CustomizeTables() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Search input ref to clear focus
+  const searchInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    const keyboardSub = Keyboard.addListener("keyboardDidHide", () => {
+      searchInputRef.current?.blur();
+    });
+    return () => keyboardSub.remove();
+  }, []);
 
   const normalizeTables = useCallback(
     (res: any[]) =>
@@ -228,7 +243,7 @@ export default function CustomizeTables() {
             t.id ||
             t.tableID;
           const tableId = t.id || t.table_id || t.tableID;
-          const isActive = false;
+          const isActive = t.is_active !== false && t.is_enabled !== false && t.status !== "disabled";
           return {
             id: String(tableId || tableNumber || t.name || t.id),
             tableId: tableId ? String(tableId) : undefined,
@@ -236,7 +251,7 @@ export default function CustomizeTables() {
             isActive,
             items: t.items ?? 0,
             total: "-",
-            status: "free",
+            status: (t.status === "disabled" || t.is_active === false || t.is_enabled === false) ? "disabled" : "free",
             time: t.time,
             flag: t.flag,
             floorName: t.floor_name ? String(t.floor_name) : "Main Floor",
@@ -443,17 +458,23 @@ export default function CustomizeTables() {
       .filter((t) => {
         if (filter === "occupied") return t.status === "occupied";
         if (filter === "free") return t.status === "free";
+        if (filter === "bill") return t.flag === "bill";
         return true;
       })
       .filter((t) => {
-        // Search by table number or id
-        const searchStr = search.toLowerCase();
+        if (!search.trim()) return true;
+        const searchStr = search.toLowerCase().trim();
         const tNum = getTableNumber(t);
         const displayedNum = padNumber(tNum);
+        const rawNumStr = String(tNum);
+        
+        // Prefer exact matches or starting matches for numbers
         return (
-          displayedNum.toLowerCase().includes(searchStr) ||
-          (t.number && String(t.number).toLowerCase().includes(searchStr)) ||
-          t.id.toLowerCase().includes(searchStr)
+          rawNumStr === searchStr ||
+          displayedNum === searchStr ||
+          rawNumStr.startsWith(searchStr) ||
+          displayedNum.startsWith(searchStr) ||
+          (t.name && t.name.toLowerCase().includes(searchStr))
         );
       });
 
@@ -1052,6 +1073,8 @@ export default function CustomizeTables() {
   const totalActivityCount = kitchenCount + serviceCount;
   const occupiedTableCount = tablesWithOrders.filter((t) => t.status === "occupied").length;
   const freeTableCount = tablesWithOrders.filter((t) => t.status === "free").length;
+  const billReqCount = tablesWithOrders.filter((t) => t.flag === "bill").length;
+  const filterBadgeCount = occupiedTableCount + billReqCount;
 
   // Selected table for action sheet
   const actionTable = actionTableId ? tablesWithOrders.find((t) => t.id === actionTableId) : null;
@@ -1060,54 +1083,117 @@ export default function CustomizeTables() {
 
 
   return (
-    <View style={styles.mainContainer}>
-      {/* ── Wavy Header ── */}
-      <WaiterWavyHeader height={160}>
-        <View style={styles.headerTopRow}>
-          <TouchableOpacity
-            style={styles.profileAvatar}
-            activeOpacity={0.8}
-            onPress={() => router.replace("/waiter/profile")}
-          >
-            {logoUrl ? (
-              <Image
-                source={{ uri: logoUrl }}
-                style={styles.profileAvatarImage}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.mainContainer}>
+      {/* ── Light Fading Orange Header ── */}
+      <WaiterWavyHeader height={sortMenuOpen ? 250 : 195}>
+        {/* Row 1: Search bar (Airbnb style) */}
+        <View style={styles.searchBarWrapHeader}>
+          <View style={styles.searchBarHeader}>
+            <MaterialIcons name="search" size={24} color="#111" style={{ marginRight: 12 }} />
+            <View style={styles.searchBarTextCol}>
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInputHeaderTall}
+                placeholder="Search tables..."
+                placeholderTextColor="#111"
+                value={search}
+                onChangeText={setSearch}
               />
-            ) : (
-              <MaterialIcons name="person" size={28} color="#10B981" />
-            )}
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Floor Overview</Text>
-            <View style={styles.headerLocationRow}>
-              <MaterialIcons
-                name="location-on"
-                size={14}
-                color="rgba(0,0,0,0.55)"
-              />
-              <Text style={styles.headerLocation}>Main Dining Hall</Text>
+              <Text style={styles.searchBarSubtitle}>Any floor • Any status</Text>
             </View>
+            <TouchableOpacity
+              style={styles.searchFilterBtn}
+              activeOpacity={0.6}
+              onPress={() => setSortMenuOpen(!sortMenuOpen)}
+            >
+              <MaterialIcons name="tune" size={18} color="#111" />
+            </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Sort Menu (Toggled directly below search bar) */}
+        {sortMenuOpen && (
+          <View style={styles.sortMenuHeader}>
+            <Text style={styles.sortMenuLabelHeader}>Sort By:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {(["number", "value", "time"] as const).map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.sortOptionHeader,
+                    sortBy === opt && styles.sortOptionHeaderActive,
+                  ]}
+                  onPress={() => setSortBy(opt)}
+                >
+                  <Text
+                    style={[
+                      styles.sortOptionTextHeader,
+                      sortBy === opt && styles.sortOptionTextHeaderActive,
+                    ]}
+                  >
+                    {opt === "number" ? "Number" : opt === "value" ? "Value" : "Time"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Row 2: 3 Action Tabs (Airbnb Style) */}
+        <View style={styles.headerTabsRow}>
+          {/* 1. Floors */}
+          <TouchableOpacity 
+            style={styles.headerTabItem} 
+            activeOpacity={0.5}
+            onPress={() => setFloorModalOpen(true)}
+          >
+            <View style={styles.tabIconWrapHeader}>
+              <MaterialIcons name="storefront" size={24} color="#717171" />
+            </View>
+            <Text style={styles.headerTabText}>Floors</Text>
+          </TouchableOpacity>
+
+          {/* 2. Filters */}
+          <TouchableOpacity 
+            style={styles.headerTabItem} 
+            activeOpacity={0.5}
+            onPress={() => setFilterModalOpen(true)}
+          >
+            <View style={styles.tabIconWrapHeader}>
+              <MaterialIcons name="filter-list" size={24} color="#717171" />
+              {filterBadgeCount > 0 && (
+                <View style={styles.redBadgeCircle}>
+                  <Text style={styles.redBadgeCircleText}>
+                    {filterBadgeCount > 9 ? "9+" : filterBadgeCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.headerTabText}>Filters</Text>
+          </TouchableOpacity>
+
+          {/* 3. Services */}
           <TouchableOpacity
-            style={styles.bellBtn}
+            style={styles.headerTabItem}
+            activeOpacity={0.5}
             onPress={() => {
               setActivitySheetOpen(true);
               refreshActivities();
             }}
           >
-            <MaterialIcons
-              name="notifications-none"
-              size={24}
-              color="#1F2937"
-            />
-            {totalActivityCount > 0 && (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>
-                  {totalActivityCount > 9 ? "9+" : totalActivityCount}
-                </Text>
-              </View>
-            )}
+            <View style={styles.tabIconWrapHeader}>
+              <MaterialIcons name="room-service" size={24} color="#717171" />
+              {totalActivityCount > 0 && (
+                <View style={styles.redBadgeCircle}>
+                  <Text style={styles.redBadgeCircleText}>
+                    {totalActivityCount > 9 ? "9+" : totalActivityCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.headerTabText}>Services</Text>
           </TouchableOpacity>
         </View>
       </WaiterWavyHeader>
@@ -1116,18 +1202,19 @@ export default function CustomizeTables() {
       <ScrollView
         style={styles.scrollBody}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#10B981"
+            tintColor="#F97316"
           />
         }
       >
         {loading && (
-          <View style={{ padding: 16, alignItems: "center" }}>
-            <ActivityIndicator size="small" color="#10B981" />
-            <Text style={{ marginTop: 6, color: "#9CA3AF" }}>
+          <View style={{ padding: 20, alignItems: "center" }}>
+            <ActivityIndicator size="small" color="#F97316" />
+            <Text style={{ marginTop: 6, color: "#9CA3AF", fontSize: 13 }}>
               Loading tables...
             </Text>
           </View>
@@ -1138,336 +1225,148 @@ export default function CustomizeTables() {
           </View>
         )}
 
-        {/* ── Metrics Row ── */}
+        {/* ── Metrics Row (Spotify Style Grid) ── */}
         <View style={styles.metricsRow}>
           <TouchableOpacity
             style={styles.metricCard}
             onPress={() => setFilter("all")}
           >
-            <View style={[styles.metricIcon, { backgroundColor: "#FEF2F2" }]}>
-              <MaterialIcons name="pending-actions" size={18} color="#EF4444" />
+            <View style={[styles.metricIconWrap, { backgroundColor: "#FFF7ED" }]}>
+              <MaterialIcons name="pending-actions" size={22} color="#F97316" />
             </View>
-            <Text style={styles.metricNum}>{pendingOrders}</Text>
-            <Text style={styles.metricLabel}>Pending</Text>
+            <View style={styles.metricContent}>
+              <Text style={styles.metricNum}>{pendingOrders}</Text>
+              <Text style={styles.metricLabel}>Pending</Text>
+            </View>
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.metricCard}>
-            <View style={[styles.metricIcon, { backgroundColor: "#ECFDF5" }]}>
-              <MaterialIcons name="receipt-long" size={18} color="#10B981" />
+            <View style={[styles.metricIconWrap, { backgroundColor: "#FEF2F2" }]}>
+              <MaterialIcons name="receipt-long" size={22} color="#EF4444" />
             </View>
-            <Text style={styles.metricNum}>0</Text>
-            <Text style={styles.metricLabel}>Bills</Text>
+            <View style={styles.metricContent}>
+              <Text style={styles.metricNum}>0</Text>
+              <Text style={styles.metricLabel}>Bills</Text>
+            </View>
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.metricCard}>
-            <View style={[styles.metricIcon, { backgroundColor: "#EFF6FF" }]}>
-              <MaterialIcons name="room-service" size={18} color="#3B82F6" />
+            <View style={[styles.metricIconWrap, { backgroundColor: "#EFF6FF" }]}>
+              <MaterialIcons name="room-service" size={22} color="#3B82F6" />
             </View>
-            <Text style={styles.metricNum}>{activeServiceCalls}</Text>
-            <Text style={styles.metricLabel}>Service</Text>
+            <View style={styles.metricContent}>
+              <Text style={styles.metricNum}>{activeServiceCalls}</Text>
+              <Text style={styles.metricLabel}>Services</Text>
+            </View>
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.metricCard}>
-            <View style={[styles.metricIcon, { backgroundColor: "#F5F3FF" }]}>
-              <MaterialIcons name="timer" size={18} color="#8B5CF6" />
+            <View style={[styles.metricIconWrap, { backgroundColor: "#F5F3FF" }]}>
+              <MaterialIcons name="timer" size={22} color="#8B5CF6" />
             </View>
-            <Text style={styles.metricNum}>0</Text>
-            <Text style={styles.metricLabel}>Long Sit</Text>
+            <View style={styles.metricContent}>
+              <Text style={styles.metricNum}>0</Text>
+              <Text style={styles.metricLabel}>Long Sit</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchBarWrap}>
-          <View style={styles.searchBar}>
-            <MaterialIcons name="search" size={20} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search tables..."
-              placeholderTextColor="#9CA3AF"
-              value={search}
-              onChangeText={setSearch}
-            />
-            <TouchableOpacity
-              style={styles.searchTuneBtn}
-              onPress={() => setSortMenuOpen(!sortMenuOpen)}
-            >
-              <MaterialIcons name="tune" size={18} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        {/* ── Sort Pills (toggle) ── */}
-        {sortMenuOpen && (
-          <View style={styles.sortMenu}>
-            <Text style={styles.sortMenuLabel}>SORT BY</Text>
-            <View style={styles.sortOptions}>
-              {(["number", "value", "time"] as const).map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[
-                    styles.sortOption,
-                    sortBy === opt && styles.sortOptionActive,
-                  ]}
-                  onPress={() => setSortBy(opt)}
-                >
-                  <Text
-                    style={[
-                      styles.sortOptionText,
-                      sortBy === opt && styles.sortOptionTextActive,
-                    ]}
-                  >
-                    {opt === "number"
-                      ? "Number"
-                      : opt === "value"
-                        ? "Value"
-                        : "Time"}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* ── Filter Tabs ── */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filtersScroll}
-        >
-          <View style={{ flexDirection: "row", gap: 8, paddingBottom: 10 }}>
-            {floors.map((floor) => (
-              <TouchableOpacity
-                key={floor}
-                onPress={() => setSelectedFloor(floor)}
-                style={[
-                  styles.filterChip,
-                  selectedFloor === floor && styles.filterChipActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedFloor === floor && styles.filterChipTextActive,
-                  ]}
-                >
-                  {floor.toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                filter === "all" && styles.filterChipActive,
-              ]}
-              onPress={() => setFilter("all")}
-            >
-              <MaterialIcons
-                name="grid-view"
-                size={14}
-                color={filter === "all" ? "#FFF" : "#6B7280"}
-                style={{ marginRight: 4 }}
-              />
-              <Text
-                style={[
-                  styles.filterChipText,
-                  filter === "all" && styles.filterChipTextActive,
-                ]}
-              >
-                All Tables
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                filter === "occupied" && styles.filterChipActive,
-              ]}
-              onPress={() => setFilter("occupied")}
-            >
-              <MaterialIcons
-                name="people"
-                size={14}
-                color={filter === "occupied" ? "#FFF" : "#6B7280"}
-                style={{ marginRight: 4 }}
-              />
-              <Text
-                style={[
-                  styles.filterChipText,
-                  filter === "occupied" && styles.filterChipTextActive,
-                ]}
-              >
-                Occupied({occupiedTableCount})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                filter === "free" && styles.filterChipActive,
-              ]}
-              onPress={() => setFilter("free")}
-            >
-              <MaterialIcons
-                name="event-available"
-                size={14}
-                color={filter === "free" ? "#FFF" : "#6B7280"}
-                style={{ marginRight: 4 }}
-              />
-              <Text
-                style={[
-                  styles.filterChipText,
-                  filter === "free" && styles.filterChipTextActive,
-                ]}
-              >
-                Available({freeTableCount})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                filter === "bill" && styles.filterChipActive,
-              ]}
-              onPress={() => setFilter("bill")}
-            >
-              <MaterialIcons
-                name="receipt"
-                size={14}
-                color={filter === "bill" ? "#FFF" : "#6B7280"}
-                style={{ marginRight: 4 }}
-              />
-              <Text
-                style={[
-                  styles.filterChipText,
-                  filter === "bill" && styles.filterChipTextActive,
-                ]}
-              >
-                Bill Requested
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
 
         {/* ── Table Grid ── */}
         <View style={styles.tablesGrid}>
-          {tables.map((item) => {
-            const tNum = getTableNumber(item);
-            const isFree = item.status === "free" || !item.isActive;
-            const isBillReq = item.flag === "bill";
-            const bg = tNum !== undefined ? billGroups.get(tNum) : undefined;
+          {(() => {
+            const totalTablesCount = tables.length;
+            const columns = totalTablesCount <= 6 ? 2 : totalTablesCount <= 12 ? 3 : 4;
+            const is2Col = columns === 2;
+            const is3Col = columns === 3;
+            const is4Col = columns === 4;
 
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.tableCard,
-                  item.status === "disabled" && { backgroundColor: "#f1f5f9", opacity: 0.6 },
-                  isFree && item.status !== "disabled" && styles.tableCardFree,
-                  !isFree && !isBillReq && item.status !== "disabled" && styles.tableCardOccupied,
-                  isBillReq && styles.tableCardBill,
-                  item.isPaid ? styles.tablePaid : null,
-                ]}
-                activeOpacity={isFree ? 1 : 0.7}
-                onPress={() => {
-                  if (!isFree) {
-                    setActionTableId(item.id);
-                    setActionSheetOpen(true);
-                  }
-                }}
-              >
-                {/* Card Header */}
-                <View style={styles.tableCardHeader}>
-                  <Text style={styles.tableNumber}>{padNumber(tNum)}</Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: isFree
-                          ? "#F3F4F6"
-                          : item.isPaid
-                            ? "#D1FAE5"
-                            : isBillReq
-                              ? "#FEF2F2"
-                              : "#ECFDF5",
-                      },
-                    ]}
-                  >
-                    <Text
+            const dynWidth = is2Col ? "48%" : is3Col ? "31.5%" : "23.5%";
+            const dynRatio = is2Col ? 1.1 : is3Col ? 0.95 : 1;
+            const dynPad = is2Col ? 16 : is3Col ? 12 : 8;
+            const dynNumSize = is2Col ? 32 : is3Col ? 24 : 18;
+            const dynTotalSize = is2Col ? 20 : is3Col ? 16 : 14;
+            const dynInfoSize = is2Col ? 14 : is3Col ? 12 : 10;
+            const dynDotSize = is2Col ? 16 : is3Col ? 12 : 10;
+
+            return tables.map((item) => {
+              const tNum = getTableNumber(item);
+              const isDisabled = item.isActive === false || item.status === "disabled";
+              const isFree = item.status === "free" && !isDisabled;
+              const isBillReq = item.flag === "bill";
+              const bg = tNum !== undefined ? billGroups.get(tNum) : undefined;
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.tableCard,
+                    { width: dynWidth as any, aspectRatio: dynRatio, padding: dynPad },
+                    isDisabled && { backgroundColor: "#F3F4F6", opacity: 0.5 },
+                    isFree && styles.tableCardFree,
+                    !isFree && !isBillReq && !isDisabled && styles.tableCardOccupied,
+                    isBillReq && styles.tableCardBill,
+                    item.isPaid ? styles.tablePaid : null,
+                  ]}
+                  activeOpacity={isFree || isDisabled ? 1 : 0.7}
+                  onPress={() => {
+                    if (!isFree && !isDisabled) {
+                      setActionTableId(item.id);
+                      setActionSheetOpen(true);
+                    }
+                  }}
+                >
+                  {/* Header: Table Number & Status Dot */}
+                  <View style={styles.tableCardHeader}>
+                    <Text style={[styles.tableNumber, { fontSize: dynNumSize }]}>{padNumber(tNum)}</Text>
+                    <View
                       style={[
-                        styles.statusText,
+                        styles.statusDot,
                         {
-                          color: isFree
+                          width: dynDotSize,
+                          height: dynDotSize,
+                          borderRadius: dynDotSize / 2,
+                          backgroundColor: isDisabled
                             ? "#9CA3AF"
-                            : item.isPaid
-                              ? "#059669"
-                              : isBillReq
-                                ? "#EF4444"
-                                : "#059669",
+                            : isFree
+                              ? "#D1D5DB"
+                              : item.isPaid
+                                ? "#10B981"
+                                : isBillReq
+                                  ? "#EF4444"
+                                  : "#F97316",
                         },
                       ]}
-                    >
-                      {isFree ? "FREE" : item.isPaid ? "PAID" : isBillReq ? "Bill Req" : "SEATED"}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Merged badge */}
-                {bg && bg.linkedTableNumbers.length > 1 && (
-                  <View style={styles.mergedBadge}>
-                    <Text style={styles.mergedBadgeText}>
-                      🔗 T
-                      {bg.linkedTableNumbers
-                        .filter((n) => n !== tNum)
-                        .join(", T")}
-                    </Text>
-                  </View>
-                )}
-
-                {item.status === "disabled" ? (
-                  <View style={styles.emptyStateContainer}>
-                    <MaterialIcons
-                      name="block"
-                      size={32}
-                      color="#D1D5DB"
                     />
-                    <Text style={styles.availableText}>Not in use</Text>
                   </View>
-                ) : isFree ? (
-                  /* Free table empty state */
-                  <View style={styles.emptyStateContainer}>
-                    <MaterialIcons
-                      name="table-restaurant"
-                      size={32}
-                      color="#D1D5DB"
-                    />
-                    <Text style={styles.availableText}>Available</Text>
-                  </View>
-                ) : (
-                  /* Occupied table info */
-                  <View style={styles.tableInfoSection}>
-                    <View style={styles.infoRow}>
-                      <MaterialIcons
-                        name="restaurant"
-                        size={14}
-                        color="#6B7280"
-                      />
-                      <Text style={styles.infoText}>{item.items} Items</Text>
+
+                  {/* Merged badge */}
+                  {bg && bg.linkedTableNumbers.length > 1 && (
+                    <View style={styles.mergedBadgeSmall}>
+                      <Text style={[styles.mergedBadgeTextSmall, { fontSize: is4Col ? 8 : 9 }]}>
+                        🔗 T{bg.linkedTableNumbers.filter((n) => n !== tNum).join(",T")}
+                      </Text>
                     </View>
-                    <View style={styles.infoRow}>
-                      <MaterialIcons
-                        name="schedule"
-                        size={14}
-                        color="#6B7280"
-                      />
-                      <Text style={styles.infoText}>{item.time || "0m"}</Text>
-                    </View>
-                    <View style={styles.cardDivider} />
-                    <Text style={styles.totalAmount}>{item.total}</Text>
+                  )}
+
+                  <View style={{ flex: 1, justifyContent: "flex-end" }}>
+                    {isDisabled ? (
+                      <Text style={[styles.emptyStateText, { fontSize: dynInfoSize + 2 }]}>Disabled</Text>
+                    ) : isFree ? (
+                      <Text style={[styles.emptyStateText, { fontSize: dynInfoSize + 2 }]}>Available</Text>
+                    ) : (
+                      <>
+                        <Text style={[styles.infoTextSm, { fontSize: dynInfoSize }]}>{item.items} Items</Text>
+                        <Text style={[styles.totalAmountSm, { fontSize: dynTotalSize }]} numberOfLines={1} adjustsFontSizeToFit>{item.total}</Text>
+                        <Text style={[styles.timeTextSm, { fontSize: dynInfoSize - 1 }]}>{item.time || "0m"}</Text>
+                      </>
+                    )}
                   </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+                </TouchableOpacity>
+              );
+            });
+          })()}
         </View>
       </ScrollView>
       {/* ═════════════════════════════════════════════════════════════════════ 
@@ -1614,32 +1513,24 @@ export default function CustomizeTables() {
         </View>
       </Modal>
 
-      {/* ═════════════════════════════════════════════════════════════════════ 
-         ACTIVITY BOTTOM SHEET
-         ═════════════════════════════════════════════════════════════════════ */}
+      {/* ── ACTIVITY FEED MODAL (OKX Style) ── */}
       <Modal
         visible={activitySheetOpen}
         transparent
-        animationType="slide"
+        animationType="fade"
         statusBarTranslucent
         onRequestClose={() => setActivitySheetOpen(false)}
       >
-        <View style={styles.bottomSheetOverlay}>
+        <View style={styles.centeredOverlay}>
           <TouchableOpacity
-            style={{ flex: 1 }}
+            style={StyleSheet.absoluteFill}
             activeOpacity={1}
             onPress={() => setActivitySheetOpen(false)}
           />
-          <View style={styles.bottomSheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Activity Feed</Text>
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={() => setActivitySheetOpen(false)}
-              >
-                <MaterialIcons name="close" size={18} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
+          <View style={[styles.okxDialogBox, { paddingVertical: 20 }]}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: "#111", marginBottom: 16 }}>
+              Activity Feed
+            </Text>
 
             {/* Tabs */}
             <View style={styles.modalTabsRow}>
@@ -1679,7 +1570,7 @@ export default function CustomizeTables() {
 
             {activityLoading ? (
               <View style={styles.emptyState}>
-                <ActivityIndicator size="large" color="#10B981" />
+                <ActivityIndicator size="large" color="#F97316" />
               </View>
             ) : activityError ? (
               <View style={{ padding: 16 }}>
@@ -1859,7 +1750,7 @@ export default function CustomizeTables() {
             ) : null}
             {mergeLoading ? (
               <View style={{ padding: 24, alignItems: "center" }}>
-                <ActivityIndicator size="large" color="#10B981" />
+                <ActivityIndicator size="large" color="#F97316" />
                 <Text style={{ marginTop: 10, color: "#6B7280" }}>
                   Merging bills...
                 </Text>
@@ -1997,7 +1888,7 @@ export default function CustomizeTables() {
               Export bill for table?
             </Text>
             <TouchableOpacity
-              style={[styles.dialogCloseBtn, { backgroundColor: "#10B981" }]}
+              style={[styles.dialogCloseBtn, { backgroundColor: "#F97316" }]}
               onPress={async () => {
                 const t = tablesData.find((x) => x.id === printSource);
                 if (t) {
@@ -2124,7 +2015,7 @@ export default function CustomizeTables() {
 
             {paidLoading ? (
               <View style={{ padding: 24, alignItems: "center" }}>
-                <ActivityIndicator size="large" color="#10B981" />
+                <ActivityIndicator size="large" color="#F97316" />
                 <Text style={{ marginTop: 10, color: "#6B7280" }}>
                   Processing payment...
                 </Text>
@@ -2152,7 +2043,7 @@ export default function CustomizeTables() {
                               : "phone-android"
                         }
                         size={22}
-                        color="#10B981"
+                        color="#F97316"
                       />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -2183,7 +2074,111 @@ export default function CustomizeTables() {
           </View>
         </View>
       </Modal>
+
+      {/* ── FILTER SELECTOR MODAL (OKX Style) ── */}
+      <Modal visible={filterModalOpen} transparent animationType="fade" onRequestClose={() => setFilterModalOpen(false)}>
+        <View style={styles.centeredOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setFilterModalOpen(false)} />
+          <View style={styles.okxDialogBox}>
+            <TouchableOpacity
+              style={styles.okxDialogItem}
+              onPress={() => {
+                setFilter("all");
+                setFilterModalOpen(false);
+              }}
+            >
+              <View style={styles.okxDialogLeft}>
+                <MaterialIcons name="view-list" size={22} color="#4B5563" />
+                <Text style={styles.okxDialogItemText}>All Tables</Text>
+              </View>
+              {filter === "all" && <MaterialIcons name="check-circle" size={22} color="#111" />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.okxDialogItem}
+              onPress={() => {
+                setFilter("occupied");
+                setFilterModalOpen(false);
+              }}
+            >
+              <View style={styles.okxDialogLeft}>
+                <MaterialIcons name="people-outline" size={22} color="#4B5563" />
+                <Text style={styles.okxDialogItemText}>Occupied ({occupiedTableCount})</Text>
+              </View>
+              {filter === "occupied" && <MaterialIcons name="check-circle" size={22} color="#111" />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.okxDialogItem}
+              onPress={() => {
+                setFilter("free");
+                setFilterModalOpen(false);
+              }}
+            >
+              <View style={styles.okxDialogLeft}>
+                <MaterialIcons name="event-seat" size={22} color="#4B5563" />
+                <Text style={styles.okxDialogItemText}>Available ({freeTableCount})</Text>
+              </View>
+              {filter === "free" && <MaterialIcons name="check-circle" size={22} color="#111" />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.okxDialogItem}
+              onPress={() => {
+                setFilter("bill");
+                setFilterModalOpen(false);
+              }}
+            >
+              <View style={styles.okxDialogLeft}>
+                <MaterialIcons name="receipt-long" size={22} color="#4B5563" />
+                <Text style={styles.okxDialogItemText}>Bill Requested</Text>
+              </View>
+              {filter === "bill" && <MaterialIcons name="check-circle" size={22} color="#111" />}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── FLOOR SELECTOR MODAL (OKX Style) ── */}
+      <Modal visible={floorModalOpen} transparent animationType="fade" onRequestClose={() => setFloorModalOpen(false)}>
+        <View style={styles.centeredOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setFloorModalOpen(false)} />
+          <View style={styles.okxDialogBox}>
+            <TouchableOpacity
+              style={styles.okxDialogItem}
+              onPress={() => {
+                setSelectedFloor("All Floors");
+                setFloorModalOpen(false);
+              }}
+            >
+              <View style={styles.okxDialogLeft}>
+                <MaterialIcons name="layers" size={22} color="#4B5563" />
+                <Text style={styles.okxDialogItemText}>All Floors</Text>
+              </View>
+              {selectedFloor === "All Floors" && <MaterialIcons name="check-circle" size={22} color="#111" />}
+            </TouchableOpacity>
+
+            {uniqueFloors.map((floor) => (
+              <TouchableOpacity
+                key={floor}
+                style={styles.okxDialogItem}
+                onPress={() => {
+                  setSelectedFloor(floor);
+                  setFloorModalOpen(false);
+                }}
+              >
+                <View style={styles.okxDialogLeft}>
+                  <MaterialIcons name="layers-clear" size={22} color="#4B5563" />
+                  <Text style={styles.okxDialogItemText}>{floor}</Text>
+                </View>
+                {selectedFloor === floor && <MaterialIcons name="check-circle" size={22} color="#111" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
     </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -2198,114 +2193,133 @@ const styles = StyleSheet.create({
   },
 
   /* ── HEADER ── */
-  headerTopRow: {
+  headerTabsRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
-    marginBottom: 10,
+    alignItems: "center",
+    marginTop: 12,
+    paddingHorizontal: 36,
   },
-  profileAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#FFF",
+  headerTabItem: {
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 4,
-    overflow: "hidden",
   },
-  profileAvatarImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  headerTabItemActive: {
+    borderBottomColor: "#222222",
   },
-  headerCenter: {
-    flex: 1,
-    marginLeft: 14,
+  tabIconWrapHeader: {
+    marginBottom: 2,
+    position: "relative",
+    alignItems: "center",
     justifyContent: "center",
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#000",
-    letterSpacing: -0.3,
-  },
-  headerLocationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 2,
-  },
-  headerLocation: {
-    fontSize: 13,
-    color: "rgba(0,0,0,0.55)",
+  headerTabText: {
+    fontSize: 12,
+    color: "#717171",
     fontWeight: "600",
-    marginLeft: 2,
   },
-  bellBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.65)",
-    alignItems: "center",
-    justifyContent: "center",
+  headerTabTextActive: {
+    color: "#222222",
+    fontWeight: "700",
   },
-  bellBadge: {
+  redBadgeCircle: {
     position: "absolute",
-    top: 4,
-    right: 4,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    top: -4,
+    right: -10,
     backgroundColor: "#EF4444",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
     borderWidth: 1.5,
-    borderColor: "#FFF8E1",
+    borderColor: "#FFF",
   },
-  bellBadgeText: {
-    fontSize: 9,
-    fontWeight: "800",
+  redBadgeCircleText: {
     color: "#FFF",
+    fontSize: 9,
+    fontWeight: "bold",
   },
 
-  /* ── SEARCH ── */
-  searchBarWrap: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    marginTop: -10,
+  /* ── SEARCH BAR (inside header) ── */
+  searchBarWrapHeader: {
+    paddingHorizontal: 18,
+    paddingBottom: 4,
   },
-  searchBar: {
+  searchBarHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 46,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 32,
+    paddingHorizontal: 20,
+    height: 60,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  searchBarTextCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  searchInputHeaderTall: {
+    fontSize: 15,
+    color: "#111",
+    fontWeight: "700",
+    padding: 0,
+    marginBottom: 0,
+  },
+  searchBarSubtitle: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "500",
+    marginTop: -2,
+  },
+  searchFilterBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-  },
-  searchInput: {
-    flex: 1,
-    height: "100%",
-    marginLeft: 10,
-    fontSize: 14,
-    color: "#1F2937",
-    fontWeight: "500",
-  },
-  searchTuneBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "#FFF",
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 8,
+  },
+  sortMenuHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 36, // Shifted more right
+    marginTop: 8,
+    paddingBottom: 4,
+  },
+  sortMenuLabelHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4B5563",
+    marginRight: 12,
+  },
+  sortOptionHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "rgba(255, 255, 255, 0.4)",
+    backgroundColor: "rgba(255, 255, 255, 0.25)", // Glassmorphism base
+  },
+  sortOptionHeaderActive: {
+    borderColor: "rgba(255, 255, 255, 0.8)",
+    backgroundColor: "rgba(255, 255, 255, 0.65)", // Glassmorphism active
+  },
+  sortOptionTextHeader: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(0, 0, 0, 0.5)",
+  },
+  sortOptionTextHeaderActive: {
+    color: "#111",
+    fontWeight: "800",
   },
 
   /* ── SCROLL BODY ── */
@@ -2320,40 +2334,47 @@ const styles = StyleSheet.create({
   /* ── METRICS ── */
   metricsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     marginBottom: 16,
   },
   metricCard: {
-    width: "23%",
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    paddingVertical: 14,
+    width: "48%",
+    flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    marginBottom: 10,
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    overflow: "hidden", // Important for the left color block
   },
-  metricIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  metricIconWrap: {
+    width: 48,
+    minHeight: 56,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+  },
+  metricContent: {
+    paddingLeft: 12,
+    paddingRight: 8,
+    flex: 1,
+    justifyContent: "center",
   },
   metricNum: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
     color: "#111",
     marginBottom: 2,
   },
   metricLabel: {
     fontSize: 11,
-    fontWeight: "600",
-    color: "#9CA3AF",
+    fontWeight: "700",
+    color: "#6B7280",
   },
 
   /* ── SORT ── */
@@ -2386,7 +2407,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
   },
   sortOptionActive: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#FFF7ED",
+    borderColor: "#F97316",
+    borderWidth: 1,
   },
   sortOptionText: {
     fontSize: 12,
@@ -2394,13 +2417,14 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
   sortOptionTextActive: {
-    color: "#92400E",
+    color: "#F97316",
     fontWeight: "800",
   },
 
   /* ── FILTERS ── */
   filtersScroll: {
     marginBottom: 14,
+    paddingHorizontal: 16,
   },
   filterChip: {
     flexDirection: "row",
@@ -2414,8 +2438,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: "#10B981",
-    borderColor: "#10B981",
+    backgroundColor: "#F97316",
+    borderColor: "#F97316",
   },
   filterChipText: {
     fontSize: 13,
@@ -2435,114 +2459,92 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   tableCard: {
-    width: "48%",
     backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1.2,
-    borderColor: "#F0F0F0",
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: "rgba(0,0,0,0.04)",
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  tableCardFree: {
-    opacity: 0.55,
-    backgroundColor: "#FAFAFA",
-    borderStyle: "dashed" as any,
-    borderColor: "#D5D5D5",
-  },
-  tableCardOccupied: {
-    borderColor: "#A7F3D0",
-    backgroundColor: "#FFFDF5",
-    shadowColor: "#10B981",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
+  tableCardFree: {
+    backgroundColor: "#F9FAFB",
+    borderStyle: "dashed" as any,
+    borderColor: "#E5E7EB",
+    shadowOpacity: 0.02,
+    elevation: 0,
+  },
+  tableCardOccupied: {
+    borderColor: "#FDBA74",
+    backgroundColor: "#FFF7ED",
+    shadowColor: "#F97316",
+    shadowOpacity: 0.12,
+  },
   tableCardBill: {
-    borderLeftColor: "#38BDF8",
-    backgroundColor: "#F0FAFF",
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+    shadowColor: "#EF4444",
+    shadowOpacity: 0.12,
   },
   tablePaid: {
-    borderTopWidth: 4,
-    borderTopColor: "#10b981",
+    borderColor: "#6EE7B7",
+    backgroundColor: "#ECFDF5",
+    shadowColor: "#10B981",
+    shadowOpacity: 0.12,
   },
   tableCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
+    alignItems: "flex-start",
   },
   tableNumber: {
-    fontSize: 20,
     fontWeight: "900",
-    color: "#1F2937",
-    letterSpacing: -0.3,
+    color: "#111",
+    letterSpacing: -1,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  statusDot: {
+    width: 12,
+    height: 12,
     borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
+    marginTop: 6,
   },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase" as any,
-  },
-  mergedBadge: {
+  mergedBadgeSmall: {
     backgroundColor: "#EEF2FF",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 4,
     alignSelf: "flex-start",
   },
-  mergedBadgeText: {
-    fontSize: 10,
+  mergedBadgeTextSmall: {
+    fontSize: 9,
     fontWeight: "700",
     color: "#4338CA",
   },
-  tableInfoSection: {
-    marginTop: 4,
+  emptyStateText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#9CA3AF",
   },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-    gap: 6,
-  },
-  infoText: {
-    fontSize: 13,
-    color: "#4B5563",
+  infoTextSm: {
+    fontSize: 12,
+    color: "#6B7280",
     fontWeight: "600",
-    marginLeft: 6,
+    marginBottom: 2,
   },
-  cardDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.05)",
-    marginVertical: 10,
-  },
-  totalAmount: {
-    fontSize: 18,
-    fontWeight: "900",
+  totalAmountSm: {
+    fontSize: 16,
+    fontWeight: "800",
     color: "#111",
-    marginTop: 4,
   },
-  emptyStateContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    opacity: 0.6,
-  },
-  availableText: {
-    marginTop: 8,
-    fontSize: 13,
+  timeTextSm: {
+    fontSize: 11,
     color: "#9CA3AF",
     fontWeight: "600",
+    marginTop: 2,
   },
 
   /* â”€â”€ BOTTOM SHEET â”€â”€ */
@@ -2669,9 +2671,9 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   actionBtnPrimary: {
-    backgroundColor: "#ECFDF5",
-    borderColor: "#D1FAE5",
-    shadowColor: "#10B981",
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+    shadowColor: "#F97316",
     shadowOpacity: 0.15,
     elevation: 4,
   },
@@ -2679,7 +2681,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     fontWeight: "700",
-    color: "#047857",
+    color: "#C2410C",
   },
   actionBtnStyleText: {
     marginTop: 8,
@@ -2757,13 +2759,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
   },
   activityBadgeText: {
     fontWeight: "800",
-    color: "#059669",
+    color: "#EA580C",
     fontSize: 14,
   },
   activityTitle: {
@@ -2777,7 +2779,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   statusChip: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#FFF7ED",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -2785,7 +2787,7 @@ const styles = StyleSheet.create({
   statusChipText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#059669",
+    color: "#EA580C",
     textTransform: "capitalize" as any,
   },
   activityActions: {
@@ -2809,10 +2811,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   actBtnAccept: {
-    backgroundColor: "#ECFDF5",
+    backgroundColor: "#FFF7ED",
   },
   actBtnAcceptText: {
-    color: "#059669",
+    color: "#EA580C",
     fontWeight: "700",
     fontSize: 13,
   },
@@ -2828,39 +2830,37 @@ const styles = StyleSheet.create({
   /* â”€â”€ CENTERED DIALOGS â”€â”€ */
   centeredOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "transparent", // Removed grayish overlay for performance
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 24,
   },
-  dialogBox: {
+  okxDialogBox: {
     width: "100%",
     backgroundColor: "#FFF",
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     shadowColor: "#000",
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 10,
   },
-  dialogTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111",
-    marginBottom: 8,
-  },
-  dialogItem: {
+  okxDialogItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    paddingVertical: 16,
   },
-  dialogItemText: {
+  okxDialogLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  okxDialogItemText: {
     fontSize: 16,
-    color: "#333",
+    color: "#111",
     fontWeight: "500",
+    marginLeft: 16,
   },
   dialogCloseBtn: {
     marginTop: 20,
@@ -2885,12 +2885,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
     borderWidth: 1,
-    borderColor: "#A7F3D0",
+    borderColor: "#FED7AA",
   },
   paymentModeLabel: {
     fontWeight: "700",

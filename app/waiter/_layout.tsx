@@ -4,20 +4,21 @@ import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { HapticTab } from "../../components/common/HapticTab";
-import { WaiterColors } from "../../constants/theme";
+
+const ORANGE = "#F97316";
 
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
-  "customize-tables": { icon: "table-restaurant", label: "Floor" },
-  waitlist: { icon: "event-seat", label: "Waitlist" },
+  "customize-tables": { icon: "grid-view", label: "Floor" },
+  waitlist: { icon: "access-time", label: "Waitlist" },
   menu: { icon: "restaurant-menu", label: "Menu" },
-  profile: { icon: "person", label: "Profile" },
+  profile: { icon: "person-outline", label: "Profile" },
 };
 
 function WaiterTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -44,19 +45,19 @@ function WaiterTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               style={styles.tabItem}
               activeOpacity={0.7}
             >
-              <View
-                style={[
-                  styles.tabIconWrap,
-                  focused && styles.tabIconWrapActive,
-                ]}
-              >
+              <View style={styles.tabIconWrap}>
                 <MaterialIcons
                   name={config.icon as any}
-                  size={22}
-                  color={focused ? WaiterColors.primary : "#9CA3AF"}
+                  size={26}
+                  color={focused ? ORANGE : "#9CA3AF"}
                 />
               </View>
-              <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  focused && styles.tabLabelActive,
+                ]}
+              >
                 {config.label}
               </Text>
             </TouchableOpacity>
@@ -136,40 +137,39 @@ export default function WaiterTabLayout() {
 
 const styles = StyleSheet.create({
   tabBarContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
     borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
-    paddingBottom: Platform.OS === "ios" ? 20 : 8,
+    borderTopColor: "rgba(0, 0, 0, 0.05)",
+    paddingBottom: Platform.OS === "ios" ? 24 : 8,
     paddingTop: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -3 },
-    elevation: 8,
   },
   tabItem: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 2,
+    paddingVertical: 4,
+    position: "relative",
   },
   tabIconWrap: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  tabIconWrapActive: {},
   tabLabel: {
-    fontSize: 11,
-    fontWeight: "500",
+    fontSize: 10,
+    fontWeight: "600",
     color: "#9CA3AF",
-    marginTop: 1,
+    marginTop: 2,
   },
   tabLabelActive: {
-    color: "#1F2937",
-    fontWeight: "700",
+    color: ORANGE,
+    fontWeight: "800",
   },
 });

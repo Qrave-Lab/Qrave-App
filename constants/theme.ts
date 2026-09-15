@@ -37,12 +37,16 @@ export const AdminColors = {
 };
 
 export const WaiterColors = {
-  primary: '#0F766E',
-  secondary: '#14B8A6',
-  accent: '#2DD4BF',
-  background: '#F0FDFA',
+  primary: '#F97316',
+  primaryDark: '#EA580C',
+  primaryLight: '#FED7AA',
+  secondary: '#FFF7ED',
+  accent: '#FB923C',
+  background: '#FFFFFF',
   card: '#FFFFFF',
-  text: '#0F172A',
+  text: '#1A1A2E',
+  textMuted: '#6B7280',
+  border: '#F3F4F6',
 };
 
 export const Fonts = Platform.select({

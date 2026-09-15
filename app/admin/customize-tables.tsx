@@ -20,7 +20,7 @@
  * @returns {JSX.Element} The admin customize tables screen.
  */
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   ScrollView,
   View,
@@ -35,6 +35,9 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Keyboard,
+  Platform,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
@@ -58,7 +61,7 @@ type Table = {
   floorName?: string;
 };
 
-/** Maps a table number â†’ its bill-group info (combined orders from all grouped tables). */
+/** Maps a table number → its bill-group info (combined orders from all grouped tables). */
 type BillGroupInfo = {
   groupId: string;
   linkedTableNumbers: number[]; // all table numbers in the group
@@ -126,9 +129,9 @@ type ServiceCallAPI = {
   created_at: string;
 };
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* ═════════════════════════════════════════════════════════════════════ 
    HELPERS
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   ═════════════════════════════════════════════════════════════════════ */
 
 const padNumber = (n: number | string | undefined) => {
   if (n === undefined || n === null) return "??";
@@ -191,6 +194,16 @@ export default function CustomizeTables() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Search input ref to clear focus
+  const searchInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    const keyboardSub = Keyboard.addListener("keyboardDidHide", () => {
+      searchInputRef.current?.blur();
+    });
+    return () => keyboardSub.remove();
+  }, []);
 
   // Table action bottom sheet
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
@@ -438,13 +451,17 @@ export default function CustomizeTables() {
       .filter((t) => {
         // Search by table number or id
         if (search) {
-          const searchStr = search.toLowerCase();
+          const searchStr = search.toLowerCase().trim();
           const tNum = getTableNumber(t);
           const displayedNum = padNumber(tNum);
+          const rawNumStr = String(tNum);
+          
           if (
-            !displayedNum.toLowerCase().includes(searchStr) &&
-            !(t.number && String(t.number).toLowerCase().includes(searchStr)) &&
-            !t.id.toLowerCase().includes(searchStr)
+            !(rawNumStr === searchStr) &&
+            !(displayedNum === searchStr) &&
+            !(rawNumStr.startsWith(searchStr)) &&
+            !(displayedNum.startsWith(searchStr)) &&
+            !(t.name && t.name.toLowerCase().includes(searchStr))
           ) {
             return false;
           }
@@ -1036,7 +1053,7 @@ export default function CustomizeTables() {
     }, [loadTables, refreshActivities])
   );
 
-  /* â”€â”€ Computed values â”€â”€ */
+  /* ── Computed values ── */
   const pendingOrders = activeOrders.filter(
     (o) => o.status === "pending",
   ).length;
@@ -1065,14 +1082,15 @@ export default function CustomizeTables() {
       ? billGroups.get(actionTableNumber)
       : undefined;
 
-  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  /* ═════════════════════════════════════════════════════════════════════ 
      RENDER
-     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+     ═════════════════════════════════════════════════════════════════════ */
 
   return (
-    <View style={styles.mainContainer}>
-      {/* ── Wavy Header ── */}
-      <AdminWavyHeader height={160}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.mainContainer}>
+        {/* ── Wavy Header ── */}
+        <AdminWavyHeader height={160}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.profileAvatar}
@@ -1186,14 +1204,20 @@ export default function CustomizeTables() {
         {/* Search Bar */}
         <View style={styles.searchBarWrap}>
           <View style={styles.searchBar}>
-            <MaterialIcons name="search" size={20} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search tables..."
-              placeholderTextColor="#9CA3AF"
-              value={search}
-              onChangeText={setSearch}
-            />
+            <MaterialIcons name="search" size={20} color="#9CA3AF" style={{ marginRight: 10 }} />
+            <View style={styles.searchBarTextCol}>
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInputHeaderTall}
+                placeholder="Search tables..."
+                placeholderTextColor="#9CA3AF"
+                value={search}
+                onChangeText={setSearch}
+              />
+              <Text style={styles.searchBarSubtitle}>
+                Any floor • Any status
+              </Text>
+            </View>
             <TouchableOpacity
               style={styles.searchTuneBtn}
               onPress={() => setSortMenuOpen(!sortMenuOpen)}
@@ -1379,124 +1403,97 @@ export default function CustomizeTables() {
 
         {/* ── Table Grid ── */}
         <View style={styles.tablesGrid}>
-          {tables.map((item) => {
-            const tNum = getTableNumber(item);
-            const isFree = item.status === "free" || !item.isActive;
-            const isBillReq = item.flag === "bill";
-            const bg = tNum !== undefined ? billGroups.get(tNum) : undefined;
+          {(() => {
+            const totalTablesCount = tables.length;
+            const columns = totalTablesCount <= 6 ? 2 : totalTablesCount <= 12 ? 3 : 4;
+            const is2Col = columns === 2;
+            const is3Col = columns === 3;
+            const is4Col = columns === 4;
 
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.tableCard,
-                  item.status === "disabled" && { backgroundColor: "#f1f5f9", opacity: 0.6 },
-                  isFree && item.status !== "disabled" && styles.tableCardFree,
-                  !isFree && !isBillReq && item.status !== "disabled" && styles.tableCardOccupied,
-                  isBillReq && styles.tableCardBill,
-                  item.isPaid ? styles.tablePaid : null,
-                ]}
-                activeOpacity={isFree ? 1 : 0.7}
-                onPress={() => {
-                  if (!isFree) {
-                    setActionTableId(item.id);
-                    setActionSheetOpen(true);
-                  }
-                }}
-              >
-                {/* Card Header */}
-                <View style={styles.tableCardHeader}>
-                  <Text style={styles.tableNumber}>{padNumber(tNum)}</Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: isFree
-                          ? "#F3F4F6"
-                          : item.isPaid
-                            ? "#D1FAE5"
-                            : isBillReq
-                              ? "#FEF2F2"
-                              : "#ECFDF5",
-                      },
-                    ]}
-                  >
-                    <Text
+            const dynWidth = is2Col ? "48%" : is3Col ? "31.5%" : "23.5%";
+            const dynRatio = is2Col ? 1.1 : is3Col ? 0.95 : 1;
+            const dynPad = is2Col ? 16 : is3Col ? 12 : 8;
+            const dynNumSize = is2Col ? 32 : is3Col ? 24 : 18;
+            const dynTotalSize = is2Col ? 20 : is3Col ? 16 : 14;
+            const dynInfoSize = is2Col ? 14 : is3Col ? 12 : 10;
+            const dynDotSize = is2Col ? 16 : is3Col ? 12 : 10;
+
+            return tables.map((item) => {
+              const tNum = getTableNumber(item);
+              const isFree = item.status === "free" || !item.isActive;
+              const isBillReq = item.flag === "bill";
+              const bg = tNum !== undefined ? billGroups.get(tNum) : undefined;
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.tableCard,
+                    { width: dynWidth as any, aspectRatio: dynRatio, padding: dynPad },
+                    item.status === "disabled" && { backgroundColor: "#f1f5f9", opacity: 0.5 },
+                    isFree && item.status !== "disabled" && styles.tableCardFree,
+                    !isFree && !isBillReq && item.status !== "disabled" && styles.tableCardOccupied,
+                    isBillReq && styles.tableCardBill,
+                    item.isPaid ? styles.tablePaid : null,
+                  ]}
+                  activeOpacity={isFree ? 1 : 0.7}
+                  onPress={() => {
+                    if (!isFree && item.status !== "disabled") {
+                      setActionTableId(item.id);
+                      setActionSheetOpen(true);
+                    }
+                  }}
+                >
+                  {/* Header: Table Number & Status Dot */}
+                  <View style={styles.tableCardHeader}>
+                    <Text style={[styles.tableNumber, { fontSize: dynNumSize }]}>{padNumber(tNum)}</Text>
+                    <View
                       style={[
-                        styles.statusText,
+                        styles.statusDot,
                         {
-                          color: isFree
+                          width: dynDotSize,
+                          height: dynDotSize,
+                          borderRadius: dynDotSize / 2,
+                          backgroundColor: item.status === "disabled"
                             ? "#9CA3AF"
-                            : item.isPaid
-                              ? "#059669"
-                              : isBillReq
-                                ? "#EF4444"
-                                : "#059669",
+                            : isFree
+                              ? "#D1D5DB"
+                              : item.isPaid
+                                ? "#10B981"
+                                : isBillReq
+                                  ? "#EF4444"
+                                  : "#F97316",
                         },
                       ]}
-                    >
-                      {isFree ? "FREE" : item.isPaid ? "PAID" : isBillReq ? "Bill Req" : "SEATED"}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Merged badge */}
-                {bg && bg.linkedTableNumbers.length > 1 && (
-                  <View style={styles.mergedBadge}>
-                    <Text style={styles.mergedBadgeText}>
-                      🔗 T
-                      {bg.linkedTableNumbers
-                        .filter((n) => n !== tNum)
-                        .join(", T")}
-                    </Text>
-                  </View>
-                )}
-
-                {item.status === "disabled" ? (
-                  <View style={styles.emptyStateContainer}>
-                    <MaterialIcons
-                      name="block"
-                      size={32}
-                      color="#D1D5DB"
                     />
-                    <Text style={styles.availableText}>Not in use</Text>
                   </View>
-                ) : isFree ? (
-                  /* Free table empty state */
-                  <View style={styles.emptyStateContainer}>
-                    <MaterialIcons
-                      name="table-restaurant"
-                      size={32}
-                      color="#D1D5DB"
-                    />
-                    <Text style={styles.availableText}>Available</Text>
-                  </View>
-                ) : (
-                  /* Occupied table info */
-                  <View style={styles.tableInfoSection}>
-                    <View style={styles.infoRow}>
-                      <MaterialIcons
-                        name="restaurant"
-                        size={14}
-                        color="#6B7280"
-                      />
-                      <Text style={styles.infoText}>{item.items} Items</Text>
+
+                  {/* Merged badge */}
+                  {bg && bg.linkedTableNumbers.length > 1 && (
+                    <View style={styles.mergedBadgeSmall}>
+                      <Text style={[styles.mergedBadgeTextSmall, { fontSize: is4Col ? 8 : 9 }]}>
+                        🔗 T{bg.linkedTableNumbers.filter((n) => n !== tNum).join(",T")}
+                      </Text>
                     </View>
-                    <View style={styles.infoRow}>
-                      <MaterialIcons
-                        name="schedule"
-                        size={14}
-                        color="#6B7280"
-                      />
-                      <Text style={styles.infoText}>{item.time || "0m"}</Text>
-                    </View>
-                    <View style={styles.cardDivider} />
-                    <Text style={styles.totalAmount}>{item.total}</Text>
+                  )}
+
+                  <View style={{ flex: 1, justifyContent: "flex-end" }}>
+                    {item.status === "disabled" ? (
+                      <Text style={[styles.emptyStateText, { fontSize: dynInfoSize + 2 }]}>Disabled</Text>
+                    ) : isFree ? (
+                      <Text style={[styles.emptyStateText, { fontSize: dynInfoSize + 2 }]}>Available</Text>
+                    ) : (
+                      <>
+                        <Text style={[styles.infoTextSm, { fontSize: dynInfoSize }]}>{item.items} Items</Text>
+                        <Text style={[styles.totalAmountSm, { fontSize: dynTotalSize }]} numberOfLines={1} adjustsFontSizeToFit>{item.total}</Text>
+                        <Text style={[styles.timeTextSm, { fontSize: dynInfoSize - 1 }]}>{item.time || "0m"}</Text>
+                      </>
+                    )}
                   </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+                </TouchableOpacity>
+              );
+            });
+          })()}
         </View>
       </ScrollView>
       {/* ═════════════════════════════════════════════════════════════════════ 
@@ -2213,6 +2210,7 @@ export default function CustomizeTables() {
         </View>
       </Modal>
     </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -2322,6 +2320,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 1,
   },
+  searchBarTextCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
   searchInput: {
     flex: 1,
     height: "100%",
@@ -2329,6 +2331,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1F2937",
     fontWeight: "500",
+  },
+  searchInputHeaderTall: {
+    fontSize: 14,
+    color: "#111",
+    fontWeight: "600",
+    padding: 0,
+    height: 20,
+  },
+  searchBarSubtitle: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    fontWeight: "500",
+    marginTop: 2,
   },
   searchTuneBtn: {
     width: 32,

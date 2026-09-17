@@ -298,11 +298,7 @@ export default function QueueScreen() {
                       </Text>
                       <View style={s.seatingBox}>
                         <Text style={s.selectLabel}>Select seating table</Text>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          style={s.tableStrip}
-                        >
+                        <View style={s.tableStrip}>
                           <Pressable
                             style={[
                               s.tableChip,
@@ -356,7 +352,7 @@ export default function QueueScreen() {
                               </Pressable>
                             );
                           })}
-                        </ScrollView>
+                        </View>
                         <Pressable
                           style={s.sessionToggle}
                           onPress={() =>
@@ -474,15 +470,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between"
   },
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.03,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    backgroundColor: "transparent",
     flex: Platform.select({ web: 1, default: 0 }),
     minWidth: Platform.OS === "web" ? 300 : undefined,
     width: Platform.OS === "web" ? undefined : "100%",
@@ -490,8 +478,6 @@ const s = StyleSheet.create({
   cardHeader: {
     flexDirection: "row",
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
     alignItems: "flex-start",
   },
   cardIcon: {
@@ -499,7 +485,7 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "800",
     color: "#0F172A",
     marginBottom: 2
@@ -520,7 +506,7 @@ const s = StyleSheet.create({
     padding: 40,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "transparent",
   },
   emptyIconWrap: {
     marginBottom: 12,
@@ -545,19 +531,13 @@ const s = StyleSheet.create({
     fontWeight: "500"
   },
   entryList: {
-    gap: 10,
+    gap: 0,
   },
   entryCard: {
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
-    padding: 16,
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
   },
   entryTopRow: {
     flexDirection: "row",
@@ -628,12 +608,8 @@ const s = StyleSheet.create({
     marginLeft: 6,
   },
   seatingBox: {
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    padding: 12,
+    paddingVertical: 12,
     marginBottom: 12,
-    backgroundColor: "#FFFFFF",
   },
   selectLabel: {
     color: "#64748B",
@@ -643,33 +619,35 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   tableStrip: {
-    flexGrow: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     marginBottom: 10,
   },
   tableChip: {
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-    backgroundColor: "#F8FAFC",
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "transparent",
+    marginBottom: 8,
   },
   tableChipActive: {
-    backgroundColor: "#0F172A",
     borderColor: "#0F172A",
+    backgroundColor: "#F1F5F9",
   },
   tableChipBestFit: {
-    backgroundColor: "#DCFCE7",
     borderColor: "#10B981",
+    backgroundColor: "#ECFDF5",
   },
   tableChipText: {
-    color: "#475569",
-    fontSize: 12,
-    fontWeight: "800",
+    color: "#64748B",
+    fontSize: 13,
+    fontWeight: "700",
   },
   tableChipTextActive: {
-    color: "#FFFFFF",
+    color: "#0F172A",
   },
   tableChipTextBestFit: {
     color: "#047857",
@@ -683,7 +661,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "transparent",
   },
   sessionToggleText: {
     color: "#0F172A",

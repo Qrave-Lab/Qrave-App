@@ -32,8 +32,11 @@ type MenuItem = {
   isArchived: boolean;
   isOutOfStock: boolean;
   stockCount: number | null;
-  imageUrl: string;
-  description: string;
+  imageUrl?: string;
+  description?: string;
+  modelGlb?: string;
+  modelUsdz?: string;
+  availableDays?: string[];
 };
 
 type CategoryOption = {
@@ -109,6 +112,9 @@ export default function WaiterMenu() {
             ? (item.price?.Float ?? item.price?.Int)
             : item.price;
 
+        const modelGlb = item.modelGlb?.String ?? item.modelGlb ?? "";
+        const modelUsdz = item.modelUsdz?.String ?? item.modelUsdz ?? "";
+
         return {
           id: String(item.id ?? item.menu_item_id ?? item.item_id ?? name),
           categoryId: item.categoryId ?? item.category_id ?? "",
@@ -122,6 +128,9 @@ export default function WaiterMenu() {
           stockCount: item.stockCount ?? null,
           imageUrl,
           description: description || "",
+          modelGlb,
+          modelUsdz,
+          availableDays: item.availableDays || item.available_days || [],
         };
       });
       setItems(normalized);
@@ -170,10 +179,13 @@ export default function WaiterMenu() {
         price: item.price,
         description: item.description || "",
         image_url: item.imageUrl || "",
+        model_glb: item.modelGlb || "",
+        model_usdz: item.modelUsdz || "",
+        available_days: item.availableDays || [],
         is_archived: item.isArchived,
         is_out_of_stock: newVal,
       });
-    } catch (error) {
+    } catch (error: any) {
       // Rollback on failure
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, isOutOfStock: !newVal } : i))
@@ -181,7 +193,7 @@ export default function WaiterMenu() {
       if (selectedItem?.id === item.id) {
         setSelectedItem((prev) => prev ? { ...prev, isOutOfStock: !newVal } : null);
       }
-      Alert.alert("Error", "Failed to update stock status");
+      Alert.alert("Error", "Failed to update stock status: " + (error?.body?.message || error?.message || String(error)));
     }
   };
 
@@ -212,7 +224,7 @@ export default function WaiterMenu() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
-        <WaiterWavyHeader height={260}>
+        <WaiterWavyHeader height={140}>
           <View style={styles.headerTopRow}>
             <Text style={styles.mainTitle}>Menu</Text>
             <Text style={styles.subTitle}>Explore available items</Text>
@@ -453,8 +465,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC" 
   },
   headerTopRow: {
-    paddingHorizontal: 24,
-    marginTop: 65, // Increased significantly to push text safely below OS status bar
+    // Removed redundant padding and marginTop since WaiterWavyHeader handles it
   },
   mainTitle: {
     fontSize: 36,
@@ -470,7 +481,7 @@ const styles = StyleSheet.create({
   },
   searchWrapper: {
     paddingHorizontal: PADDING_HORIZONTAL,
-    marginTop: -28, // Overlaps the wavy header beautifully
+    marginTop: 0,
     marginBottom: 16,
     zIndex: 10,
   },

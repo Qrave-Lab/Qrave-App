@@ -28,7 +28,7 @@ export default function WaiterWavyHeader({
     <View style={[styles.container, { height }]}>
       {/* Light fading orange gradient - rectangle style */}
       <LinearGradient
-        colors={["rgba(249, 115, 22, 0.25)", "rgba(249, 115, 22, 0.08)", "transparent"]}
+        colors={["rgba(251, 146, 60, 0.15)", "rgba(251, 146, 60, 0.05)", "rgba(251, 146, 60, 0)"]}
         style={StyleSheet.absoluteFill}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}

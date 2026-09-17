@@ -1081,12 +1081,20 @@ export default function CustomizeTables() {
   const actionTableNumber = actionTable ? getTableNumber(actionTable) : undefined;
   const actionTableBg = actionTableNumber !== undefined ? billGroups.get(actionTableNumber) : undefined;
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.mainContainer}>
       {/* ── Light Fading Orange Header ── */}
-      <WaiterWavyHeader height={sortMenuOpen ? 250 : 195}>
+      <WaiterWavyHeader height={sortMenuOpen ? 285 : 235}>
+        <View style={{ paddingHorizontal: 18, marginBottom: 8, marginTop: 0 }}>
+          <Text style={{ fontSize: 30, fontWeight: "800", color: "#111", letterSpacing: -1 }}>
+            {greeting}
+          </Text>
+        </View>
         {/* Row 1: Search bar (Airbnb style) */}
         <View style={styles.searchBarWrapHeader}>
           <View style={styles.searchBarHeader}>
@@ -2344,18 +2352,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    borderRadius: 12,
-    marginBottom: 10,
+    borderRadius: 24,
+    padding: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
     shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-    overflow: "hidden", // Important for the left color block
+    shadowOpacity: 0.02,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
   metricIconWrap: {
-    width: 48,
-    minHeight: 56,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2366,15 +2377,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   metricNum: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "800",
-    color: "#111",
-    marginBottom: 2,
+    color: "#0F172A",
+    letterSpacing: -0.5,
   },
   metricLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#6B7280",
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
   },
 
   /* ── SORT ── */

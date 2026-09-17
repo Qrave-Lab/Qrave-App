@@ -335,11 +335,7 @@ export default function WaiterWaitlistScreen() {
               </View>
             </View>
             <Text style={styles.label}>Table</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.tableStrip}
-            >
+            <View style={styles.tableStrip}>
               <TouchableOpacity
                 style={[
                   styles.tableChip,
@@ -386,7 +382,7 @@ export default function WaiterWaitlistScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </View>
             <View style={styles.row}>
               <View style={styles.flex}>
                 <Text style={styles.label}>Phone</Text>
@@ -563,11 +559,7 @@ export default function WaiterWaitlistScreen() {
                       <Text style={styles.selectionLabel}>
                         Select seating table
                       </Text>
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.tableStrip}
-                      >
+                      <View style={styles.tableStrip}>
                         <TouchableOpacity
                           style={[
                             styles.tableChip,
@@ -622,7 +614,7 @@ export default function WaiterWaitlistScreen() {
                             </TouchableOpacity>
                           );
                         })}
-                      </ScrollView>
+                      </View>
                     </View>
 
                     {/* Auto-session toggle */}
@@ -713,45 +705,39 @@ export default function WaiterWaitlistScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   content: { padding: 16, paddingBottom: 40, gap: 16 },
-  section: { gap: 10 },
+  section: { gap: 10, paddingBottom: 16 },
   sectionTitle: {
     color: "#0F172A",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "800",
+    paddingHorizontal: 8,
   },
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 20,
+    backgroundColor: "transparent",
+    paddingTop: 8,
+    paddingBottom: 24,
     gap: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
   },
-  label: { fontSize: 13, fontWeight: "700", color: "#64748B", marginBottom: -4 },
+  label: { fontSize: 13, fontWeight: "700", color: "#64748B", marginBottom: -4, paddingHorizontal: 8 },
   input: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     fontSize: 15,
     color: "#0F172A",
     fontWeight: "500",
+    backgroundColor: "transparent",
   },
-  row: { flexDirection: "row", gap: 12, flexWrap: "wrap" },
+  row: { flexDirection: "row", gap: 12, flexWrap: "wrap", paddingHorizontal: 8 },
   flex: { flex: 1, minWidth: 140 },
   primaryBtn: {
     backgroundColor: WaiterColors.primary,
-    borderRadius: 16,
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 8,
-    shadowColor: WaiterColors.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    marginHorizontal: 8,
   },
   primaryBtnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
   secondaryBtn: {
@@ -762,7 +748,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
   iconBtn: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F1F5F9",
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -777,16 +763,11 @@ const styles = StyleSheet.create({
   },
   ghostBtnText: { color: "#EF4444", fontWeight: "700", fontSize: 13 },
   listItem: {
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
     gap: 12,
-    marginTop: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
   },
   listRow: {
     flexDirection: "row",
@@ -820,11 +801,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   seatingBox: {
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: "#FFFFFF",
+    paddingVertical: 8,
     gap: 8,
   },
   selectionLabel: {
@@ -833,20 +810,27 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
   },
-  emptyText: { fontSize: 12, color: "#94A3B8" },
-  tableStrip: { flexGrow: 0 },
-  tableChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    marginRight: 8,
+  emptyText: { fontSize: 14, color: "#94A3B8", textAlign: "center", marginTop: 20 },
+  tableStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 8,
   },
-  tableChipActive: { backgroundColor: WaiterColors.primary },
-  tableChipBestFit: { backgroundColor: "#FFF7ED" },
-  tableChipText: { color: "#475569", fontWeight: "700", fontSize: 13 },
-  tableChipTextActive: { color: "#FFFFFF" },
-  tableChipTextBestFit: { color: WaiterColors.primary, fontWeight: "800" },
+  tableChip: {
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "transparent",
+    marginBottom: 8,
+  },
+  tableChipActive: { borderColor: WaiterColors.primary, backgroundColor: "#EEF2FF" },
+  tableChipBestFit: { borderColor: "#F59E0B", backgroundColor: "#FFFBEB" },
+  tableChipText: { color: "#64748B", fontWeight: "700", fontSize: 13 },
+  tableChipTextActive: { color: WaiterColors.primary },
+  tableChipTextBestFit: { color: "#D97706", fontWeight: "800" },
   seatGuestBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -855,21 +839,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     gap: 6,
-    shadowColor: WaiterColors.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
   },
   seatGuestText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F9FAFB",
-    padding: 12,
-    borderRadius: 12,
+    backgroundColor: "transparent",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     gap: 10,
   },
-  toggleRowActive: { backgroundColor: "#FFF7ED" },
+  toggleRowActive: { },
   toggleThumb: {
     width: 20,
     height: 20,

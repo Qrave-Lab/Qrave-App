@@ -4,8 +4,12 @@ import "expo-crypto";
 import { AppState, Platform } from "react-native";
 import "react-native-url-polyfill/auto";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  "https://meinjlziygllnutmnyof.supabase.co";
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laW5qbHppeWdsbG51dG1ueW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMjMxMzcsImV4cCI6MjA5MDc5OTEzN30.5VgRSv0hs075Y8EUgq8E_-747spnnUu1S1lXj5DJUls";
 const hasSupabaseConfig =
   Boolean(supabaseUrl && supabaseAnonKey) &&
   !String(supabaseAnonKey).startsWith("REPLACE_WITH_");

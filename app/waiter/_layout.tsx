@@ -1,8 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs";
+import { useEffect, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -52,12 +52,7 @@ function WaiterTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                   color={focused ? ORANGE : "#9CA3AF"}
                 />
               </View>
-              <Text
-                style={[
-                  styles.tabLabel,
-                  focused && styles.tabLabelActive,
-                ]}
-              >
+              <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
                 {config.label}
               </Text>
             </TouchableOpacity>

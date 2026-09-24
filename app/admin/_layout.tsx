@@ -1,18 +1,18 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { HapticTab } from "../../components/common/HapticTab";
 import { useColorScheme } from "../../hooks/use-color-scheme";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs, useRouter, useSegments } from "expo-router";
+import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs";
 import {
-    BackHandler,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  BackHandler,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const TAB_CONFIG: Record<string, { icon: string; label: string }> = {

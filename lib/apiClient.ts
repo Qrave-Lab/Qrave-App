@@ -4,7 +4,9 @@ import { Platform } from 'react-native';
 import type { ApiClient, ApiError } from '@/types/api';
 import type { LoginResponse } from '@/types/auth';
 
-export const BASE_URL: string = process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.100:3000";
+export const BASE_URL: string = (
+  process.env.EXPO_PUBLIC_API_URL || "https://qrave-backend-1-ea0d.onrender.com"
+).replace(/\/+$/, "");
 const TOKEN_KEY = 'qrave_jwt';
 const REFRESH_KEY = 'qrave_refresh';
 const CSRF_KEY = 'qrave_csrf';
@@ -100,7 +102,11 @@ function decodeJwtPayload(token: string | null | undefined): Record<string, unkn
     if (typeof atob === 'function') {
       return JSON.parse(atob(normalized));
     }
-    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
+    const globalBuffer = (globalThis as unknown as { Buffer?: { from: (s: string, e: string) => { toString: (e: string) => string } } }).Buffer;
+    if (globalBuffer) {
+      return JSON.parse(globalBuffer.from(normalized, 'base64').toString('utf8'));
+    }
+    return null;
   } catch (_e) {
     return null;
   }

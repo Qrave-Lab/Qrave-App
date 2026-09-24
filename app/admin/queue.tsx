@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import iconPng from "../../assets/images/icon.png";
 import AdminWavyHeader from "../../components/admin/AdminWavyHeader";
-import apiClient from "../../lib/apiClient";
+import apiClient, { BASE_URL } from "../../lib/apiClient";
 import { getStoredLogoVersion, withLogoVersion } from "../../lib/logoVersion";
 
 type ReservationEntry = {
@@ -149,7 +149,7 @@ export default function QueueScreen() {
         if (rId) {
           const version = await getStoredLogoVersion();
           const res = await fetch(
-            `https://qrave-backend.onrender.com/public/restaurants/${rId}/logo`,
+            `${BASE_URL}/public/restaurants/${rId}/logo`,
           );
           const data = await res.json();
           setLogoUrl(withLogoVersion(data?.logo_url, version));

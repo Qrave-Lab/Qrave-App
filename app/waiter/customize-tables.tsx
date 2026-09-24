@@ -274,9 +274,11 @@ export default function CustomizeTables() {
     }
   }, [normalizeTables]);
 
-  useEffect(() => {
-    loadTables();
-  }, [loadTables]);
+  useFocusEffect(
+    useCallback(() => {
+      loadTables();
+    }, [loadTables])
+  );
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityTab, setActivityTab] = useState<"kitchen" | "service">(
     "kitchen",
@@ -845,6 +847,31 @@ export default function CustomizeTables() {
     }
   };
 
+  const handleAskBill = async (targetTableId: string) => {
+    if (!targetTableId) return;
+    const table = tablesWithOrders.find((t) => t.id === targetTableId);
+    if (!table) return;
+    const tableNumber = getTableNumber(table);
+
+    const session = activeSessions.find(
+      (s) => Number(s.table_number) === tableNumber
+    );
+    const sessionId = session?.session_id || session?.id;
+
+    if (!sessionId) {
+      Alert.alert("Error", "No active session found for this table.");
+      return;
+    }
+
+    try {
+      await api.post(`/api/customer/orders/bill-request`, { session_id: sessionId });
+      Alert.alert("Success", "Bill requested for table.");
+      await refreshActivities();
+    } catch (e: any) {
+      Alert.alert("Error", e?.body?.message || e?.message || "Could not request bill.");
+    }
+  };
+
   const handleMarkPaid = async (targetTableId: string, mode: "cash" | "card" | "upi" = "cash") => {
     if (!targetTableId) return;
     const table = tablesWithOrders.find((t) => t.id === targetTableId);
@@ -1005,16 +1032,18 @@ export default function CustomizeTables() {
     );
   };
 
-  useEffect(() => {
-    refreshActivities();
-    // Fetch restaurant_id for payment
-    (async () => {
-      try {
-        const me: any = await api.get("/api/admin/me");
-        setRestaurantId(me?.restaurant_id || "");
-      } catch {}
-    })();
-  }, [refreshActivities]);
+  useFocusEffect(
+    useCallback(() => {
+      refreshActivities();
+      // Fetch restaurant_id for payment
+      (async () => {
+        try {
+          const me: any = await api.get("/api/admin/me");
+          setRestaurantId(me?.restaurant_id || "");
+        } catch {}
+      })();
+    }, [refreshActivities])
+  );
 
   useEffect(() => {
     const uniqueTables = new Set(
@@ -1319,7 +1348,12 @@ export default function CustomizeTables() {
                   ]}
                   activeOpacity={isFree || isDisabled ? 1 : 0.7}
                   onPress={() => {
-                    if (!isFree && !isDisabled) {
+                    if (isFree && !isDisabled) {
+                      router.push({
+                        pathname: "/waiter/take-order",
+                        params: { table_id: item.id, table_number: tNum },
+                      });
+                    } else if (!isDisabled) {
                       setActionTableId(item.id);
                       setActionSheetOpen(true);
                     }
@@ -1468,6 +1502,18 @@ export default function CustomizeTables() {
               >
                 <MaterialIcons name="payments" size={24} color="#047857" />
                 <Text style={styles.actionBtnPrimaryText}>Mark Paid</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtnStyle, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" }]}
+                onPress={() => {
+                  setActionSheetOpen(false);
+                  if (actionTableId) {
+                    handleAskBill(actionTableId);
+                  }
+                }}
+              >
+                <MaterialIcons name="receipt" size={24} color="#1D4ED8" />
+                <Text style={[styles.actionBtnPrimaryText, { color: "#1D4ED8" }]}>Ask Bill</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionBtnStyle}

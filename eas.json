@@ -8,6 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://qrave-backend-1-ea0d.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laW5qbHppeWdsbG51dG1ueW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMjMxMzcsImV4cCI6MjA5MDc5OTEzN30.5VgRSv0hs075Y8EUgq8E_-747spnnUu1S1lXj5DJUls",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
@@ -22,6 +23,7 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://qrave-backend-1-ea0d.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laW5qbHppeWdsbG51dG1ueW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMjMxMzcsImV4cCI6MjA5MDc5OTEzN30.5VgRSv0hs075Y8EUgq8E_-747spnnUu1S1lXj5DJUls",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",
@@ -36,6 +38,7 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://qrave-backend-1-ea0d.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://meinjlziygllnutmnyof.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laW5qbHppeWdsbG51dG1ueW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMjMxMzcsImV4cCI6MjA5MDc5OTEzN30.5VgRSv0hs075Y8EUgq8E_-747spnnUu1S1lXj5DJUls",
         "EXPO_PUBLIC_WEB_URL": "https://qrave-website.vercel.app",

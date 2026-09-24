@@ -378,4 +378,15 @@ export const api: ApiClient = {
 
 
 
+export function formatError(err: any): string {
+  const msg = err?.message || err?.body?.message || err?.body?.error || String(err);
+  if (!msg || msg === "[object Object]") return "An unexpected error occurred.";
+  
+  if (msg.includes("fetch failed") || msg.includes("UnexpectedException") || msg.includes("network connection was lost") || msg.includes("hostname could not be found") || msg.includes("Network request failed")) {
+    return "Network error: Could not connect to the server. Please check your connection.";
+  }
+  
+  return msg;
+}
+
 export default api;

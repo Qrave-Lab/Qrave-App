@@ -49,6 +49,19 @@ export const WaiterColors = {
   border: '#F3F4F6',
 };
 
+export const KitchenColors = {
+  primary: '#F59E0B',
+  primaryDark: '#D97706',
+  primaryLight: '#FDE68A',
+  secondary: '#FFFBEB',
+  accent: '#FBBF24',
+  background: '#FFFFFF',
+  card: '#FFFFFF',
+  text: '#1A1A2E',
+  textMuted: '#6B7280',
+  border: '#F3F4F6',
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

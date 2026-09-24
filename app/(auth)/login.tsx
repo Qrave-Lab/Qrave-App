@@ -93,6 +93,7 @@ import {
   login as apiLogin,
   persistAuthFromResponse,
   BASE_URL,
+  formatError,
 } from "../../lib/apiClient";
 import { syncBackendSessionForGoogleUser } from "../../lib/googleBackendBridge";
 import { clearSupabasePkceState, supabase } from "../../lib/supabaseClient";
@@ -470,11 +471,8 @@ export default function LoginScreen() {
 
       if (status === 401 || normalized.includes("invalid credentials")) {
         setError("Wrong email or password.");
-      } else if (normalized.includes("network request failed")) {
-        setError("Network error. Please check your internet and try again.");
       } else {
-        const msg = rawBody || err?.message || "Login failed";
-        setError(String(msg).trim());
+        setError(formatError(err));
       }
     } finally {
       setIsLoading(false);

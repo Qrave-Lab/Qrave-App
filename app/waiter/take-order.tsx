@@ -282,6 +282,10 @@ export default function TakeOrder() {
     refreshCategories();
   }, [refreshMenu, refreshCategories]);
 
+  useEffect(() => {
+    setCart({});
+  }, [tableId, initialSessionId]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([refreshMenu(true), refreshCategories()]);

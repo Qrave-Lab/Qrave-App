@@ -87,6 +87,7 @@ type MenuItem = {
   allergens: { type: Allergen; confidence: AllergenConfidence }[];
   availableDays: DayOfWeek[];
   selected: boolean;
+  _raw?: any;
 };
 
 type CategoryOption = {
@@ -282,6 +283,7 @@ export default function Inventory() {
           allergens: item.allergens || [],
           availableDays: item.availableDays || [],
           selected: false,
+          _raw: item,
         };
       });
       setItems(normalized);
@@ -348,19 +350,45 @@ export default function Inventory() {
   const buildUpdateBody = (
     item: MenuItem,
     overrides: Record<string, any> = {},
-  ) => ({
-    category_id: item.categoryId || undefined,
-    name: item.name,
-    price: item.price,
-    description: item.description || "",
-    image_url: item.imageUrl || "",
-    model_glb: item.modelGlb || "",
-    model_usdz: item.modelUsdz || "",
-    available_days: item.availableDays || [],
-    is_archived: item.isArchived,
-    is_out_of_stock: item.isOutOfStock,
-    ...overrides,
-  });
+  ) => {
+    const raw = item._raw || {};
+    return {
+      category_id: item.categoryId || undefined,
+      name: item.name,
+      price: item.price,
+      description: item.description || "",
+      calories: raw.calories,
+      food_cost: raw.foodCost ?? raw.food_cost ?? 0,
+      estimated_prep_minutes: raw.estimatedPrepMinutes ?? raw.estimated_prep_minutes,
+      is_veg: raw.isVeg ?? raw.is_veg,
+      dietary_manual_override: raw.dietaryManualOverride ?? raw.dietary_manual_override,
+      image_url: item.imageUrl || "",
+      model_glb: item.modelGlb || "",
+      model_usdz: item.modelUsdz || "",
+      available_days: item.availableDays || [],
+      is_archived: item.isArchived,
+      is_out_of_stock: item.isOutOfStock,
+      is_todays_special: raw.isTodaysSpecial ?? raw.is_todays_special,
+      is_chef_special: raw.isChefSpecial ?? raw.is_chef_special,
+      is_best_seller: raw.isBestSeller ?? raw.is_best_seller,
+      is_new: raw.isNew ?? raw.is_new,
+      spice_level: raw.spiceLevel ?? raw.spice_level || "none",
+      pair_with_item_ids: raw.pairWithItemIds ?? raw.pair_with_item_ids || [],
+      publish_at: raw.publishAt ?? raw.publish_at,
+      unpublish_at: raw.unpublishAt ?? raw.unpublish_at,
+      scheduled_price: raw.scheduledPrice ?? raw.scheduled_price,
+      scheduled_price_effective_at: raw.scheduledPriceEffectiveAt ?? raw.scheduled_price_effective_at,
+      special_note: raw.specialNote ?? raw.special_note || "",
+      hsn_code: raw.hsnCode ?? raw.hsn_code || "",
+      gst_rate: raw.gstRate ?? raw.gst_rate,
+      width_cm: raw.widthCm ?? raw.width_cm,
+      height_cm: raw.heightCm ?? raw.height_cm,
+      depth_cm: raw.depthCm ?? raw.depth_cm,
+      has_steam: raw.hasSteam ?? raw.has_steam,
+      model_scale: raw.modelScale ?? raw.model_scale,
+      ...overrides,
+    };
+  };
 
   const handleBulkArchive = async (archive: boolean) => {
     const selected = items.filter((i) => i.selected);
@@ -518,18 +546,10 @@ export default function Inventory() {
         itemId = res.id;
       }
 
-      await api.put(`/api/admin/menu/item?item_id=${itemId}`, {
-        category_id: editingItem.categoryId || undefined,
-        name: editingItem.name,
-        price: editingItem.price,
-        description: editingItem.description,
-        image_url: editingItem.imageUrl,
-        model_glb: editingItem.modelGlb,
-        model_usdz: editingItem.modelUsdz,
-        available_days: editingItem.availableDays,
-        is_archived: editingItem.isArchived,
-        is_out_of_stock: editingItem.isOutOfStock,
-      });
+      await api.put(
+        `/api/admin/menu/item?item_id=${itemId}`,
+        buildUpdateBody(editingItem)
+      );
 
       await api.put(
         `/api/admin/menu/item/ingredients?item_id=${itemId}`,
@@ -1685,6 +1705,18 @@ export default function Inventory() {
               {/* Modal Actions */}
               <View style={styles.modalActions}>
                 <View style={styles.modalActionsSecondaryRow}>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, styles.modalBtnSecondary]}
+                    onPress={() => {
+                      setModalMode(null);
+                      setEditingItem(null);
+                    }}
+                    disabled={saving || deletingItem}
+                  >
+                    <Text style={styles.modalBtnText} numberOfLines={1}>
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
                   {modalMode === "edit" && editingItem?.id ? (
                     <TouchableOpacity
                       style={[

@@ -82,12 +82,16 @@ type Activity = {
 };
 
 type ActiveOrderItem = {
-  menu_item_id: string;
-  variant_id: string;
-  quantity: number;
-  price: number;
-  menu_item_name: string;
-  variant_label: string | null;
+  menu_item_id?: string;
+  variant_id?: string;
+  quantity?: number;
+  price?: number;
+  menu_item_name?: string;
+  variant_label?: string | null;
+  notes?: string;
+  description?: string;
+  special_instructions?: string;
+  instructions?: string;
 };
 
 type ActiveOrder = {
@@ -96,8 +100,15 @@ type ActiveOrder = {
   status: string;
   created_at: string;
   session_id: string;
-  table_id: string;
+  table_id?: string;
   table_number: number;
+  notes?: string;
+  description?: string;
+  special_instructions?: string;
+  instructions?: string;
+  customer_notes?: string;
+  customer_name?: string;
+  remarks?: string;
   items: ActiveOrderItem[];
 };
 
@@ -373,27 +384,65 @@ export default function CustomizeTables() {
       value,
     );
 
+  const getClientDescription = (order: ActiveOrder): string | null => {
+    const note =
+      order.special_instructions ||
+      order.notes ||
+      order.description ||
+      order.instructions ||
+      order.customer_notes ||
+      order.remarks ||
+      "";
+    if (typeof note === "string" && note.trim().length > 0) {
+      return note.trim();
+    }
+    return null;
+  };
+
   const resolveTargetTableId = async (rawId: string) => {
     if (!rawId) return "";
     if (isUuid(rawId)) return rawId;
 
-    const asNumber = Number(rawId);
-    if (!Number.isFinite(asNumber)) return "";
+    // Check direct match in tablesData
+    const directMatch = tablesData.find(
+      (t) => t.id === rawId || t.tableId === rawId
+    );
+    if (directMatch?.tableId && isUuid(directMatch.tableId)) {
+      return String(directMatch.tableId);
+    }
+    if (directMatch?.id && isUuid(directMatch.id)) {
+      return String(directMatch.id);
+    }
+
+    const cleaned = String(rawId).replace(/\D/g, "");
+    const asNumber = Number(cleaned);
 
     const localMatch = tablesData.find(
-      (t) => getTableNumber(t) === asNumber && t.tableId,
+      (t) =>
+        (t.id === rawId ||
+          t.tableId === rawId ||
+          (asNumber > 0 && getTableNumber(t) === asNumber)) &&
+        (t.tableId || t.id),
     );
+    if (localMatch?.tableId && isUuid(localMatch.tableId)) return String(localMatch.tableId);
+    if (localMatch?.id && isUuid(localMatch.id)) return String(localMatch.id);
     if (localMatch?.tableId) return String(localMatch.tableId);
+    if (localMatch?.id) return String(localMatch.id);
 
     try {
       const res = await api.get("/api/admin/tables");
       const normalized = normalizeTables(res);
       const match = normalized.find(
-        (t: any) => getTableNumber(t) === asNumber && t.tableId,
+        (t: any) =>
+          t.id === rawId ||
+          t.tableId === rawId ||
+          (asNumber > 0 && getTableNumber(t) === asNumber),
       );
-      return match?.tableId ? String(match.tableId) : "";
+      if (match?.tableId) return String(match.tableId);
+      if (match?.id) return String(match.id);
+      return rawId;
     } catch {
-      return "";
+      return rawId;
     }
   };
 
@@ -665,6 +714,7 @@ export default function CustomizeTables() {
       }
 
       setActiveOrders(ordersList);
+      setActiveSessions(sessionsList);
       setServiceCalls(serviceCallsList);
       setTodaySales(salesTotal);
       setActiveSessionTableNumbers(
@@ -749,38 +799,48 @@ export default function CustomizeTables() {
     const sourceTable = tablesWithOrders.find((t) => t.id === moveSource);
     if (!sourceTable) return;
     const sourceNumber = getTableNumber(sourceTable);
+
+    // Look for active session in activeOrders or in activeSessions
     const sourceOrder = activeOrders.find(
       (o) => sourceNumber !== undefined && o.table_number === sourceNumber,
     );
-    const sessionId = sourceOrder?.session_id;
+    const sessionFromList = activeSessions.find(
+      (s) => Number(s.table_number) === sourceNumber,
+    );
+    const sessionId =
+      sourceOrder?.session_id ||
+      sessionFromList?.session_id ||
+      sessionFromList?.id;
+
     if (!sessionId) {
-      setMoveError("No active session to move.");
+      setMoveError("No active session found for this table to move.");
       return;
     }
+
+    const targetTable = tablesWithOrders.find(
+      (t) => t.id === targetTableId || t.tableId === targetTableId,
+    );
+    const targetNumber = targetTable ? getTableNumber(targetTable) : undefined;
     const resolvedTargetId = await resolveTargetTableId(targetTableId);
-    if (!resolvedTargetId) {
-      setMoveError(
-        "Target table id is missing or invalid. Please refresh and try again.",
-      );
-      return;
-    }
 
     setMoveLoading(true);
     setMoveError(null);
     try {
-      console.log("Move table payload", {
+      const payload: any = {
         session_id: sessionId,
-        target_table_id: resolvedTargetId,
-      });
-      await api.post("/api/admin/table-move", {
-        session_id: sessionId,
-        target_table_id: resolvedTargetId,
-      });
-      const res = await api.get("/api/admin/tables");
-      setTablesData(normalizeTables(res));
-      await refreshActivities();
+      };
+      if (resolvedTargetId) payload.target_table_id = resolvedTargetId;
+      if (targetNumber !== undefined) payload.target_table_number = targetNumber;
+
+      console.log("Move table payload", payload);
+      await api.post("/api/admin/table-move", payload);
+      await Promise.all([loadTables(), refreshActivities()]);
       setMoveModalOpen(false);
       setMoveSource(null);
+      Alert.alert(
+        "Table Moved",
+        `Successfully moved Table ${sourceNumber ?? "?"} to Table ${targetNumber ?? "?"}.`,
+      );
     } catch (e: any) {
       const status = e?.status ? ` (status ${e.status})` : "";
       const detail = e?.body?.message || e?.body?.error || e?.message;
@@ -813,8 +873,12 @@ export default function CustomizeTables() {
     const targetOrder = activeOrders.find(
       (o) => targetNumber !== undefined && o.table_number === targetNumber,
     );
-    const sourceSessionId = sourceOrder?.session_id;
-    const targetSessionId = targetOrder?.session_id;
+    
+    const sourceSessionFromList = activeSessions.find((s) => Number(s.table_number) === sourceNumber);
+    const targetSessionFromList = activeSessions.find((s) => Number(s.table_number) === targetNumber);
+
+    const sourceSessionId = sourceOrder?.session_id || sourceSessionFromList?.session_id || sourceSessionFromList?.id;
+    const targetSessionId = targetOrder?.session_id || targetSessionFromList?.session_id || targetSessionFromList?.id;
 
     if (!sourceSessionId || !targetSessionId) {
       setMergeError("Both tables must have active sessions to merge.");
@@ -983,6 +1047,56 @@ export default function CustomizeTables() {
           style: "destructive",
           onPress: async () => {
             setFreeLoading(tableId);
+
+            const session = activeSessions.find(
+              (s) => Number(s.table_number) === tableNumber
+            );
+            const sessionId = session?.session_id || session?.id;
+            const bg = tableNumber !== undefined ? billGroups.get(tableNumber) : undefined;
+
+            try {
+              let tablesToClear = tableNumber !== undefined ? [tableNumber] : [];
+              if (bg) {
+                tablesToClear = bg.linkedTableNumbers;
+              }
+              const ordersToCancel = activeOrders.filter(
+                (o) => o.table_number !== undefined && tablesToClear.includes(o.table_number)
+              );
+              await Promise.all(
+                ordersToCancel.map(async (o) => {
+                  const id = o.id || o.order_id;
+                  if (!id) return Promise.resolve();
+                  try {
+                    await api.patch(`/api/admin/orders/${id}/status`, { status: "cancelled" });
+                  } catch (e) {
+                    console.log("Failed to cancel order, it may already be completed:", id);
+                  }
+                })
+              );
+
+              if (sessionId || bg) {
+                const sessionsToEnd = new Set<string>();
+                if (bg) {
+                  bg.linkedTableNumbers.forEach((tNum) => {
+                    const s = activeSessions.find((s) => Number(s.table_number) === tNum);
+                    if (s?.session_id || s?.id) sessionsToEnd.add(s.session_id || s.id);
+                  });
+                } else if (sessionId) {
+                  sessionsToEnd.add(sessionId);
+                }
+
+                await Promise.all(
+                  Array.from(sessionsToEnd).map((id) =>
+                    api.post(`/api/admin/sessions/${id}/end`)
+                  )
+                );
+              }
+            } catch (e: any) {
+              Alert.alert("Error", e?.body?.message || e?.message || "Failed to free table.");
+              setFreeLoading(null);
+              return; // Stop here, do not update UI if backend rejected
+            }
+
             // Update local state immediately
             setTablesData((prev) =>
               prev.map((t) =>
@@ -1017,6 +1131,25 @@ export default function CustomizeTables() {
                 return nextCalls;
               });
               return nextOrders;
+            });
+
+            // Aggressively update session state locally to prevent UI reversion
+            setActiveSessionTableNumbers((prev) => {
+              const next = new Set(prev);
+              if (tableNumber !== undefined) next.delete(tableNumber);
+              if (bg) {
+                bg.linkedTableNumbers.forEach(n => next.delete(n));
+              }
+              return next;
+            });
+            
+            setActiveSessions((prev) => {
+              return prev.filter((s) => {
+                const num = Number(s.table_number);
+                if (num === tableNumber) return false;
+                if (bg && bg.linkedTableNumbers.includes(num)) return false;
+                return true;
+              });
             });
 
             // Refresh from server
@@ -1109,6 +1242,93 @@ export default function CustomizeTables() {
   const actionTable = actionTableId ? tablesWithOrders.find((t) => t.id === actionTableId) : null;
   const actionTableNumber = actionTable ? getTableNumber(actionTable) : undefined;
   const actionTableBg = actionTableNumber !== undefined ? billGroups.get(actionTableNumber) : undefined;
+
+  const actionTableOrders = useMemo(() => {
+    if (actionTableNumber === undefined) return [];
+    return activeOrders.filter((o) => {
+      if (actionTableBg && actionTableBg.linkedTableNumbers.includes(o.table_number)) return true;
+      return o.table_number === actionTableNumber;
+    });
+  }, [actionTableNumber, actionTableBg, activeOrders]);
+
+  const isActionTablePending = useMemo(() => {
+    return (
+      actionTableOrders.some((o) => {
+        const st = (o.status || "").toLowerCase();
+        return st === "pending" || st === "new" || st === "accepted" || st === "preparing";
+      }) ||
+      ((actionTable?.items || 0) > 0 && actionTableOrders.length === 0 && !actionTable?.isPaid)
+    );
+  }, [actionTableOrders, actionTable]);
+
+  const isActionTableDelivered = useMemo(() => {
+    return (
+      (actionTableOrders.length > 0 &&
+        actionTableOrders.every((o) => {
+          const st = (o.status || "").toLowerCase();
+          return st === "delivered" || st === "ready" || st === "served" || st === "completed";
+        })) ||
+      Boolean(actionTable?.isPaid)
+    );
+  }, [actionTableOrders, actionTable]);
+
+  const actionTableSessionId = useMemo(() => {
+    const fromOrder = actionTableOrders.find((o) => o.session_id)?.session_id;
+    if (fromOrder) return fromOrder;
+    const session = activeSessions.find(
+      (s) => Number(s.table_number) === actionTableNumber,
+    );
+    return session?.session_id || session?.id || "";
+  }, [actionTableOrders, activeSessions, actionTableNumber]);
+
+  const handleToggleSingleOrderStatus = async (orderId: string, currentStatus: string) => {
+    const nextStatus =
+      currentStatus === "delivered" || currentStatus === "ready"
+        ? "preparing"
+        : "delivered";
+    try {
+      await api.patch(`/api/admin/orders/${orderId}/status`, { status: nextStatus });
+      setActiveOrders((prev) =>
+        prev.map((o) =>
+          (o.id || o.order_id) === orderId ? { ...o, status: nextStatus } : o,
+        ),
+      );
+      await refreshActivities();
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to update order status.");
+    }
+  };
+
+  const handleMarkOrdersDelivered = async () => {
+    if (actionTableOrders.length === 0) {
+      Alert.alert("No Orders", "There are no active orders to mark as delivered.");
+      return;
+    }
+    try {
+      for (const o of actionTableOrders) {
+        const id = o.id || o.order_id;
+        if (id) {
+          await api.patch(`/api/admin/orders/${id}/status`, { status: "delivered" });
+        }
+      }
+      await refreshActivities();
+      Alert.alert("Delivered", `All orders for Table ${actionTableNumber} marked as delivered.`);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to mark orders as delivered.");
+    }
+  };
+
+  const handleAddItemsToTable = () => {
+    setActionSheetOpen(false);
+    router.push({
+      pathname: "/waiter/take-order",
+      params: {
+        table_id: actionTable?.tableId || actionTableId || "",
+        table_number: actionTableNumber !== undefined ? String(actionTableNumber) : "",
+        session_id: actionTableSessionId,
+      },
+    } as any);
+  };
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -1310,6 +1530,7 @@ export default function CustomizeTables() {
 
 
 
+
         {/* ── Table Grid ── */}
         <View style={styles.tablesGrid}>
           {(() => {
@@ -1320,7 +1541,7 @@ export default function CustomizeTables() {
             const is4Col = columns === 4;
 
             const dynWidth = is2Col ? "48%" : is3Col ? "31.5%" : "23.5%";
-            const dynRatio = is2Col ? 1.1 : is3Col ? 0.95 : 1;
+            const dynRatio = is2Col ? 1.05 : is3Col ? 0.95 : 1;
             const dynPad = is2Col ? 16 : is3Col ? 12 : 8;
             const dynNumSize = is2Col ? 32 : is3Col ? 24 : 18;
             const dynTotalSize = is2Col ? 20 : is3Col ? 16 : 14;
@@ -1334,6 +1555,28 @@ export default function CustomizeTables() {
               const isBillReq = item.flag === "bill";
               const bg = tNum !== undefined ? billGroups.get(tNum) : undefined;
 
+              const tableOrders = activeOrders.filter((o) => {
+                if (tNum === undefined) return false;
+                if (bg && bg.linkedTableNumbers.includes(o.table_number)) return true;
+                return o.table_number === tNum;
+              });
+
+              const isPending = !isFree && !isDisabled && (
+                tableOrders.some((o) => {
+                  const s = (o.status || "").toLowerCase();
+                  return s === "pending" || s === "new" || s === "accepted" || s === "preparing";
+                }) ||
+                (item.items > 0 && tableOrders.length === 0 && !item.isPaid)
+              );
+
+              const isDelivered = !isFree && !isDisabled && !isPending && (
+                (tableOrders.length > 0 && tableOrders.every((o) => {
+                  const s = (o.status || "").toLowerCase();
+                  return s === "delivered" || s === "ready" || s === "served" || s === "completed";
+                })) ||
+                Boolean(item.isPaid)
+              );
+
               return (
                 <TouchableOpacity
                   key={item.id}
@@ -1342,16 +1585,18 @@ export default function CustomizeTables() {
                     { width: dynWidth as any, aspectRatio: dynRatio, padding: dynPad },
                     isDisabled && { backgroundColor: "#F3F4F6", opacity: 0.5 },
                     isFree && styles.tableCardFree,
-                    !isFree && !isBillReq && !isDisabled && styles.tableCardOccupied,
+                    !isFree && !isDisabled && isPending && styles.tableCardPending,
+                    !isFree && !isDisabled && isDelivered && styles.tableCardDelivered,
+                    !isFree && !isDisabled && !isPending && !isDelivered && !isBillReq && styles.tableCardOccupied,
                     isBillReq && styles.tableCardBill,
                     item.isPaid ? styles.tablePaid : null,
                   ]}
-                  activeOpacity={isFree || isDisabled ? 1 : 0.7}
+                  activeOpacity={isDisabled ? 1 : 0.7}
                   onPress={() => {
                     if (isFree && !isDisabled) {
                       router.push({
                         pathname: "/waiter/take-order",
-                        params: { table_id: item.id, table_number: tNum },
+                        params: { table_id: item.tableId || item.id, table_number: tNum },
                       });
                     } else if (!isDisabled) {
                       setActionTableId(item.id);
@@ -1375,9 +1620,13 @@ export default function CustomizeTables() {
                               ? "#D1D5DB"
                               : item.isPaid
                                 ? "#10B981"
-                                : isBillReq
+                                : isPending
                                   ? "#EF4444"
-                                  : "#F97316",
+                                  : isDelivered
+                                    ? "#10B981"
+                                    : isBillReq
+                                      ? "#EF4444"
+                                      : "#F97316",
                         },
                       ]}
                     />
@@ -1399,7 +1648,18 @@ export default function CustomizeTables() {
                       <Text style={[styles.emptyStateText, { fontSize: dynInfoSize + 2 }]}>Available</Text>
                     ) : (
                       <>
-                        <Text style={[styles.infoTextSm, { fontSize: dynInfoSize }]}>{item.items} Items</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                          <Text style={[styles.infoTextSm, { fontSize: dynInfoSize }]}>{item.items} Items</Text>
+                          {isPending ? (
+                            <View style={styles.statusBadgePendingSmall}>
+                              <Text style={[styles.statusBadgePendingSmallText, { fontSize: is4Col ? 7 : 8 }]}>Pending</Text>
+                            </View>
+                          ) : isDelivered ? (
+                            <View style={styles.statusBadgeDeliveredSmall}>
+                              <Text style={[styles.statusBadgeDeliveredSmallText, { fontSize: is4Col ? 7 : 8 }]}>Delivered</Text>
+                            </View>
+                          ) : null}
+                        </View>
                         <Text style={[styles.totalAmountSm, { fontSize: dynTotalSize }]} numberOfLines={1} adjustsFontSizeToFit>{item.total}</Text>
                         <Text style={[styles.timeTextSm, { fontSize: dynInfoSize - 1 }]}>{item.time || "0m"}</Text>
                       </>
@@ -1412,7 +1672,7 @@ export default function CustomizeTables() {
         </View>
       </ScrollView>
       {/* ═════════════════════════════════════════════════════════════════════ 
-         TABLE ACTION BOTTOM SHEET
+         TABLE ACTION / ORDER DETAILS BOTTOM SHEET
          ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={actionSheetOpen}
@@ -1427,142 +1687,325 @@ export default function CustomizeTables() {
             activeOpacity={1}
             onPress={() => setActionSheetOpen(false)}
           />
-          <View style={styles.bottomSheet}>
+          <View style={styles.orderWindowContainer}>
+            {/* Sheet Handle */}
+            <View style={styles.sheetHandle} />
+
+            {/* Sheet Header */}
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <Text style={styles.sheetTitle}>
-                    Table{" "}
-                    {actionTableNumber !== undefined
-                      ? padNumber(actionTableNumber)
-                      : "?"}
-                    {" - "}Manage Order
+                    Table {actionTableNumber !== undefined ? padNumber(actionTableNumber) : "?"}
                   </Text>
                   {actionTable?.isPaid ? (
-                    <View style={{ backgroundColor: "#d1fae5", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <MaterialIcons name="check-circle" size={12} color="#059669" />
-                      <Text style={{ color: "#059669", fontSize: 11, fontWeight: "800" }}>PAID</Text>
+                    <View style={styles.paidHeaderBadge}>
+                      <MaterialIcons name="check-circle" size={13} color="#059669" />
+                      <Text style={styles.paidHeaderBadgeText}>PAID</Text>
+                    </View>
+                  ) : isActionTableDelivered ? (
+                    <View style={styles.deliveredHeaderBadge}>
+                      <MaterialIcons name="check-circle" size={13} color="#059669" />
+                      <Text style={styles.deliveredHeaderBadgeText}>DELIVERED</Text>
+                    </View>
+                  ) : isActionTablePending ? (
+                    <View style={styles.pendingHeaderBadge}>
+                      <MaterialIcons name="hourglass-top" size={13} color="#DC2626" />
+                      <Text style={styles.pendingHeaderBadgeText}>PENDING</Text>
                     </View>
                   ) : null}
                 </View>
-                {actionTableBg &&
-                  actionTableBg.linkedTableNumbers.length > 1 && (
-                    <Text style={styles.sheetSubtitle}>
-                      🔗 Merged with T
-                      {actionTableBg.linkedTableNumbers
-                        .filter((n) => n !== actionTableNumber)
-                        .join(", T")}
-                    </Text>
-                  )}
+                {actionTableBg && actionTableBg.linkedTableNumbers.length > 1 && (
+                  <Text style={styles.sheetSubtitle}>
+                    🔗 Merged with T
+                    {actionTableBg.linkedTableNumbers
+                      .filter((n) => n !== actionTableNumber)
+                      .join(", T")}
+                  </Text>
+                )}
               </View>
               <TouchableOpacity
                 style={styles.closeBtn}
                 onPress={() => setActionSheetOpen(false)}
               >
-                <MaterialIcons name="close" size={18} color="#6B7280" />
+                <MaterialIcons name="close" size={20} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
-            {/* Summary bar */}
-            <View style={styles.statusCard}>
-              <View style={styles.statusMain}>
-                <Text style={styles.statusLabel}>Current Bill</Text>
-                <Text style={styles.statusValue}>
-                  {actionTable?.total || "-"}
-                </Text>
-              </View>
-              <View style={styles.verticalDivider} />
-              <View style={styles.statusDetails}>
-                <View style={styles.statusDetailRow}>
-                  <MaterialIcons name="restaurant" size={14} color="#6B7280" />
-                  <Text style={styles.statusDetailText}>
-                    {actionTable?.items || 0} Items
-                  </Text>
-                </View>
-                <View style={styles.statusDetailRow}>
-                  <MaterialIcons name="schedule" size={14} color="#6B7280" />
-                  <Text style={styles.statusDetailText}>
-                    {actionTable?.time || "0m"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Quick Actions */}
-            <Text style={styles.sectionLabel}>Quick Actions</Text>
-            <View style={styles.actionGrid}>
-              <TouchableOpacity
-                style={[styles.actionBtnStyle, styles.actionBtnPrimary]}
-                onPress={() => {
-                  setActionSheetOpen(false);
-                  if (actionTableId) {
-                    handleMarkPaid(actionTableId, "cash");
-                  }
-                }}
-              >
-                <MaterialIcons name="payments" size={24} color="#047857" />
-                <Text style={styles.actionBtnPrimaryText}>Mark Paid</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtnStyle, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" }]}
-                onPress={() => {
-                  setActionSheetOpen(false);
-                  if (actionTableId) {
-                    handleAskBill(actionTableId);
-                  }
-                }}
-              >
-                <MaterialIcons name="receipt" size={24} color="#1D4ED8" />
-                <Text style={[styles.actionBtnPrimaryText, { color: "#1D4ED8" }]}>Ask Bill</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionBtnStyle}
-                onPress={() => {
-                  setActionSheetOpen(false);
-                  setPrintSource(actionTableId);
-                  setPrintModalOpen(true);
-                }}
-              >
-                <MaterialIcons name="print" size={24} color="#6B7280" />
-                <Text style={styles.actionBtnStyleText}>Print</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionBtnStyle}
-                onPress={() => {
-                  setActionSheetOpen(false);
-                  setMoveSource(actionTableId);
-                  setMoveError(null);
-                  setMoveModalOpen(true);
-                }}
-              >
-                <MaterialIcons name="swap-horiz" size={24} color="#6B7280" />
-                <Text style={styles.actionBtnStyleText}>Move</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionBtnStyle}
-                onPress={() => {
-                  setActionSheetOpen(false);
-                  setMergeSource(actionTableId);
-                  setMergeError(null);
-                  setMergeModalOpen(true);
-                }}
-              >
-                <MaterialIcons name="merge-type" size={24} color="#6B7280" />
-                <Text style={styles.actionBtnStyleText}>Merge</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Clear & Free */}
-            <TouchableOpacity
-              style={styles.dangerBtn}
-              onPress={() => {
-                setActionSheetOpen(false);
-                if (actionTableId) handleFreeTable(actionTableId);
-              }}
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              showsVerticalScrollIndicator={false}
             >
-              <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
-              <Text style={styles.dangerBtnText}>Clear & Free Table</Text>
-            </TouchableOpacity>
+              {/* ── Status Banner (Red for Pending, Green for Delivered) ── */}
+              {isActionTablePending ? (
+                <View style={styles.statusBannerPending}>
+                  <View style={styles.statusBannerLeft}>
+                    <MaterialIcons name="hourglass-top" size={22} color="#DC2626" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.statusBannerTitlePending}>ORDER PENDING PREPARATION</Text>
+                      <Text style={styles.statusBannerSubPending}>Kitchen is cooking items for this table</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.bannerDeliveredBtn}
+                    onPress={handleMarkOrdersDelivered}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="done-all" size={16} color="#FFF" />
+                    <Text style={styles.bannerDeliveredBtnText}>Mark Delivered</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : isActionTableDelivered ? (
+                <View style={styles.statusBannerDelivered}>
+                  <View style={styles.statusBannerLeft}>
+                    <MaterialIcons name="check-circle" size={22} color="#059669" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.statusBannerTitleDelivered}>ALL ORDERS DELIVERED</Text>
+                      <Text style={styles.statusBannerSubDelivered}>All items have been served to guests</Text>
+                    </View>
+                  </View>
+                  <View style={styles.servedBadge}>
+                    <Text style={styles.servedBadgeText}>SERVED ✓</Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.statusBannerSeated}>
+                  <MaterialIcons name="table-restaurant" size={20} color="#D97706" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.statusBannerTitleSeated}>TABLE OCCUPIED</Text>
+                    <Text style={styles.statusBannerSubSeated}>Guests seated • Tap 'Add Items / Take Order' below</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Summary Bar */}
+              <View style={styles.statusCard}>
+                <View style={styles.statusMain}>
+                  <Text style={styles.statusLabel}>Current Bill</Text>
+                  <Text style={styles.statusValue}>{actionTable?.total || "-"}</Text>
+                </View>
+                <View style={styles.verticalDivider} />
+                <View style={styles.statusDetails}>
+                  <View style={styles.statusDetailRow}>
+                    <MaterialIcons name="restaurant" size={16} color="#6B7280" />
+                    <Text style={styles.statusDetailText}>
+                      {actionTable?.items || 0} Total Items
+                    </Text>
+                  </View>
+                  <View style={styles.statusDetailRow}>
+                    <MaterialIcons name="schedule" size={16} color="#6B7280" />
+                    <Text style={styles.statusDetailText}>{actionTable?.time || "0m"}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* ── Order Details & Client Special Instructions ── */}
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionLabel}>
+                  Active Orders ({actionTableOrders.length})
+                </Text>
+                {actionTableOrders.length > 0 && (
+                  <TouchableOpacity
+                    onPress={handleMarkOrdersDelivered}
+                    style={styles.markAllSmallBtn}
+                  >
+                    <MaterialIcons name="done-all" size={14} color="#059669" />
+                    <Text style={styles.markAllSmallBtnText}>Mark All Delivered</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {actionTableOrders.length > 0 ? (
+                <View style={styles.ordersListContainer}>
+                  {actionTableOrders.map((ord, oIdx) => {
+                    const clientNote = getClientDescription(ord);
+                    const ordId = ord.id || ord.order_id || `order-${oIdx}`;
+                    const shortId = ordId.length > 8 ? ordId.slice(-6) : ordId;
+                    const isDelivered =
+                      ord.status === "delivered" ||
+                      ord.status === "ready" ||
+                      ord.status === "completed" ||
+                      ord.status === "served";
+
+                    return (
+                      <View key={ordId} style={styles.orderCardBox}>
+                        <View style={styles.orderCardHeader}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={styles.orderCardId}>Order #{shortId}</Text>
+                            <View
+                              style={[
+                                styles.orderStatusPill,
+                                isDelivered ? styles.orderStatusPillDelivered : styles.orderStatusPillPending,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.orderStatusPillText,
+                                  isDelivered ? styles.orderStatusPillDeliveredText : styles.orderStatusPillPendingText,
+                                ]}
+                              >
+                                {isDelivered ? "DELIVERED" : "PENDING"}
+                              </Text>
+                            </View>
+                          </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.orderStatusToggleBtn,
+                              isDelivered ? styles.orderStatusToggleBtnGreen : styles.orderStatusToggleBtnOrange,
+                            ]}
+                            onPress={() => handleToggleSingleOrderStatus(ordId, ord.status)}
+                          >
+                            <MaterialIcons
+                              name={isDelivered ? "undo" : "check"}
+                              size={14}
+                              color={isDelivered ? "#059669" : "#C2410C"}
+                            />
+                            <Text
+                              style={[
+                                styles.orderStatusToggleBtnText,
+                                isDelivered ? { color: "#059669" } : { color: "#C2410C" },
+                              ]}
+                            >
+                              {isDelivered ? "Reset" : "Deliver"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Client Instructions Callout */}
+                        {clientNote ? (
+                          <View style={styles.orderClientNoteCallout}>
+                            <View style={styles.orderClientNoteHeader}>
+                              <MaterialIcons name="speaker-notes" size={14} color="#B45309" />
+                              <Text style={styles.orderClientNoteTitle}>CLIENT INSTRUCTIONS</Text>
+                            </View>
+                            <Text style={styles.orderClientNoteBody}>{clientNote}</Text>
+                          </View>
+                        ) : null}
+
+                        {/* Items in this order */}
+                        <View style={styles.orderItemsList}>
+                          {(ord.items || []).map((it, iIdx) => {
+                            const itemNote =
+                              it.notes || it.description || it.special_instructions || it.instructions;
+                            return (
+                              <View key={`${ordId}-item-${iIdx}`} style={styles.orderItemRow}>
+                                <View style={styles.orderItemQtyBadge}>
+                                  <Text style={styles.orderItemQtyText}>x{it.quantity || 1}</Text>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.orderItemName}>
+                                    {it.menu_item_name || "Item"}
+                                  </Text>
+                                  {it.variant_label ? (
+                                    <Text style={styles.orderItemVariant}>
+                                      Option: {it.variant_label}
+                                    </Text>
+                                  ) : null}
+                                  {itemNote ? (
+                                    <Text style={styles.orderItemNote}>Note: {itemNote}</Text>
+                                  ) : null}
+                                </View>
+                                {it.price ? (
+                                  <Text style={styles.orderItemPrice}>
+                                    Rs {(Number(it.price) * (Number(it.quantity) || 1)).toLocaleString()}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.emptyOrdersCard}>
+                  <MaterialIcons name="restaurant-menu" size={28} color="#D1D5DB" />
+                  <Text style={styles.emptyOrdersCardTitle}>No order items found</Text>
+                  <Text style={styles.emptyOrdersCardSubtitle}>
+                    Tap 'Take Order / Add Items' below to record food orders.
+                  </Text>
+                </View>
+              )}
+
+              {/* Primary Action Button */}
+              <TouchableOpacity
+                style={styles.primaryAddItemsBtn}
+                onPress={handleAddItemsToTable}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="post-add" size={22} color="#FFF" />
+                <Text style={styles.primaryAddItemsBtnText}>Take Order / Add Items</Text>
+              </TouchableOpacity>
+
+              {/* Quick Actions Grid */}
+              <Text style={[styles.sectionLabel, { marginTop: 14 }]}>Quick Table Actions</Text>
+              <View style={styles.actionGrid}>
+                <TouchableOpacity
+                  style={[styles.actionBtnStyle, styles.actionBtnPrimary]}
+                  onPress={() => {
+                    setActionSheetOpen(false);
+                    if (actionTableId) {
+                      handleMarkPaid(actionTableId, "cash");
+                    }
+                  }}
+                >
+                  <MaterialIcons name="payments" size={22} color="#047857" />
+                  <Text style={styles.actionBtnPrimaryText}>Mark Paid</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionBtnStyle}
+                  onPress={() => {
+                    setActionSheetOpen(false);
+                    setMoveSource(actionTableId);
+                    setMoveError(null);
+                    setMoveModalOpen(true);
+                  }}
+                >
+                  <MaterialIcons name="swap-horiz" size={22} color="#6B7280" />
+                  <Text style={styles.actionBtnStyleText}>Move</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionBtnStyle}
+                  onPress={() => {
+                    setActionSheetOpen(false);
+                    setMergeSource(actionTableId);
+                    setMergeError(null);
+                    setMergeModalOpen(true);
+                  }}
+                >
+                  <MaterialIcons name="merge-type" size={22} color="#6B7280" />
+                  <Text style={styles.actionBtnStyleText}>Merge</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionBtnStyle}
+                  onPress={() => {
+                    setActionSheetOpen(false);
+                    setPrintSource(actionTableId);
+                    setPrintModalOpen(true);
+                  }}
+                >
+                  <MaterialIcons name="print" size={22} color="#6B7280" />
+                  <Text style={styles.actionBtnStyleText}>Print</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Clear & Free */}
+              <TouchableOpacity
+                style={styles.dangerBtn}
+                onPress={() => {
+                  setActionSheetOpen(false);
+                  if (actionTableId) handleFreeTable(actionTableId);
+                }}
+              >
+                <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
+                <Text style={styles.dangerBtnText}>Clear & Free Table</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1776,36 +2219,72 @@ export default function CustomizeTables() {
       </Modal>
 
       {/* ═════════════════════════════════════════════════════════════════════ 
-         MERGE MODAL
+         MERGE MODAL (Redesigned)
          ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={mergeModalOpen}
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setMergeModalOpen(false)}
+        onRequestClose={() => {
+          if (!mergeLoading) {
+            setMergeModalOpen(false);
+            setMergeError(null);
+          }
+        }}
       >
         <View style={styles.centeredOverlay}>
-          <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Merge Table</Text>
-            <Text style={{ marginBottom: 8, color: "#666" }}>
-              {(() => {
-                const src = tablesWithOrders.find((t) => t.id === mergeSource);
-                const label = src
-                  ? `T${src.number ?? getTableNumber(src) ?? src.id}`
-                  : mergeSource;
-                return `Merging ${label} into another occupied table`;
-              })()}
-            </Text>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => {
+              if (!mergeLoading) {
+                setMergeModalOpen(false);
+                setMergeError(null);
+              }
+            }}
+          />
+          <View style={styles.modernMoveDialog}>
+            <View style={styles.moveDialogHeader}>
+              <View style={[styles.moveIconBadge, { backgroundColor: "#EEF2FF" }]}>
+                <MaterialIcons name="merge-type" size={24} color="#4338CA" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.moveDialogTitle}>Merge Table</Text>
+                <Text style={styles.moveDialogSubtitle}>
+                  {(() => {
+                    const src = tablesWithOrders.find((t) => t.id === mergeSource);
+                    const label = src
+                      ? `Table ${src.number ?? getTableNumber(src) ?? src.id}`
+                      : mergeSource;
+                    return `Combine ${label} bill with another table`;
+                  })()}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!mergeLoading) {
+                    setMergeModalOpen(false);
+                    setMergeError(null);
+                  }
+                }}
+                style={styles.closeBtnSmall}
+              >
+                <MaterialIcons name="close" size={18} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
             {mergeError ? (
-              <Text style={{ color: "red", marginBottom: 10 }}>
-                {mergeError}
-              </Text>
+              <View style={styles.moveErrorBox}>
+                <MaterialIcons name="error-outline" size={16} color="#DC2626" />
+                <Text style={styles.moveErrorText}>{mergeError}</Text>
+              </View>
             ) : null}
+
             {mergeLoading ? (
-              <View style={{ padding: 24, alignItems: "center" }}>
+              <View style={{ paddingVertical: 32, alignItems: "center" }}>
                 <ActivityIndicator size="large" color="#F97316" />
-                <Text style={{ marginTop: 10, color: "#6B7280" }}>
+                <Text style={{ marginTop: 10, color: "#6B7280", fontWeight: "600" }}>
                   Merging bills...
                 </Text>
               </View>
@@ -1815,31 +2294,48 @@ export default function CustomizeTables() {
                   (t) => t.id !== mergeSource && t.status === "occupied",
                 )}
                 keyExtractor={(t) => t.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.dialogItem}
-                    onPress={() => handleMergeTable(item.id)}
-                  >
-                    <Text style={styles.dialogItemText}>
-                      T{item.number ?? getTableNumber(item) ?? item.id} -{" "}
-                      {item.total}
-                    </Text>
-                    <MaterialIcons
-                      name="arrow-forward"
-                      size={20}
-                      color="#666"
-                    />
-                  </TouchableOpacity>
-                )}
+                style={{ maxHeight: 320 }}
+                renderItem={({ item }) => {
+                  const targetNum = item.number ?? getTableNumber(item) ?? item.id;
+                  return (
+                    <TouchableOpacity
+                      style={styles.moveDestinationCard}
+                      onPress={() => handleMergeTable(item.id)}
+                      activeOpacity={0.7}
+                      disabled={mergeLoading}
+                    >
+                      <View style={styles.moveDestLeft}>
+                        <View style={[styles.moveTablePill, { backgroundColor: "#E0E7FF" }]}>
+                          <Text style={[styles.moveTablePillText, { color: "#4338CA" }]}>T{targetNum}</Text>
+                        </View>
+                        <View>
+                          <Text style={styles.moveTableTitle}>Table {targetNum}</Text>
+                          <Text style={styles.moveTableFloor}>
+                            {item.total} • {item.items} items
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={[styles.moveActionPill, { backgroundColor: "#4338CA" }]}>
+                        <Text style={styles.moveActionPillText}>Merge</Text>
+                        <MaterialIcons name="merge-type" size={16} color="#FFF" />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
                 ListEmptyComponent={
-                  <View style={{ paddingVertical: 16, alignItems: "center" }}>
-                    <Text style={{ color: "#9CA3AF" }}>
-                      No other occupied tables to merge with.
+                  <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                    <MaterialIcons name="merge-type" size={36} color="#9CA3AF" />
+                    <Text style={{ color: "#6B7280", fontWeight: "700", marginTop: 8 }}>
+                      No Occupied Tables
+                    </Text>
+                    <Text style={{ color: "#9CA3AF", fontSize: 13, marginTop: 2, textAlign: "center" }}>
+                      Other tables need active orders to merge with.
                     </Text>
                   </View>
                 }
               />
             )}
+
             <TouchableOpacity
               onPress={() => {
                 if (!mergeLoading) {
@@ -1847,86 +2343,156 @@ export default function CustomizeTables() {
                   setMergeError(null);
                 }
               }}
-              style={styles.dialogCloseBtn}
+              style={styles.moveCancelBtn}
             >
-              <Text style={{ color: "#FFF", fontWeight: "700" }}>Close</Text>
+              <Text style={styles.moveCancelBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       {/* ═════════════════════════════════════════════════════════════════════ 
-         MOVE MODAL
+         MOVE MODAL (Redesigned)
          ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={moveModalOpen}
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setMoveModalOpen(false)}
+        onRequestClose={() => {
+          if (!moveLoading) {
+            setMoveModalOpen(false);
+            setMoveError(null);
+          }
+        }}
       >
         <View style={styles.centeredOverlay}>
-          <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Move Table</Text>
-            <Text style={{ marginBottom: 8, color: "#666" }}>
-              {(() => {
-                const src = tablesData.find((t) => t.id === moveSource);
-                const label = src
-                  ? `T${src.number ?? getTableNumber(src) ?? src.id}`
-                  : moveSource;
-                return `Moving ${label} to another table`;
-              })()}
-            </Text>
-            {moveError ? (
-              <Text style={{ color: "red", marginBottom: 10 }}>
-                {moveError}
-              </Text>
-            ) : null}
-            <FlatList
-              data={tablesWithOrders.filter(
-                (t) => t.id !== moveSource && t.status === "free",
-              )}
-              keyExtractor={(t) => t.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.dialogItem}
-                  onPress={() => {
-                    if (!item.tableId) {
-                      setMoveError(
-                        "Target table id missing. Please refresh table data.",
-                      );
-                      return;
-                    }
-                    handleMoveTable(item.tableId);
-                  }}
-                  disabled={moveLoading}
-                >
-                  <Text style={styles.dialogItemText}>
-                    T{item.number ?? getTableNumber(item) ?? item.id} (Free)
-                  </Text>
-                  <MaterialIcons name="arrow-forward" size={20} color="#666" />
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <View style={{ paddingVertical: 16, alignItems: "center" }}>
-                  <Text style={{ color: "#9CA3AF" }}>
-                    No empty tables available.
-                  </Text>
-                </View>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => {
+              if (!moveLoading) {
+                setMoveModalOpen(false);
+                setMoveError(null);
               }
-            />
+            }}
+          />
+          <View style={styles.modernMoveDialog}>
+            <View style={styles.moveDialogHeader}>
+              <View style={styles.moveIconBadge}>
+                <MaterialIcons name="swap-horiz" size={24} color="#C2410C" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.moveDialogTitle}>Move Table</Text>
+                <Text style={styles.moveDialogSubtitle}>
+                  {(() => {
+                    const src = tablesData.find((t) => t.id === moveSource);
+                    const label = src
+                      ? `Table ${src.number ?? getTableNumber(src) ?? src.id}`
+                      : moveSource;
+                    return `Move ${label} to an available table`;
+                  })()}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!moveLoading) {
+                    setMoveModalOpen(false);
+                    setMoveError(null);
+                  }
+                }}
+                style={styles.closeBtnSmall}
+              >
+                <MaterialIcons name="close" size={18} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {moveError ? (
+              <View style={styles.moveErrorBox}>
+                <MaterialIcons name="error-outline" size={16} color="#DC2626" />
+                <Text style={styles.moveErrorText}>{moveError}</Text>
+              </View>
+            ) : null}
+
+            {moveLoading ? (
+              <View style={{ paddingVertical: 32, alignItems: "center" }}>
+                <ActivityIndicator size="large" color="#F97316" />
+                <Text style={{ marginTop: 10, color: "#6B7280", fontWeight: "600" }}>
+                  Moving table session...
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={tablesWithOrders.filter(
+                  (t) => t.id !== moveSource && t.status === "free",
+                )}
+                keyExtractor={(t) => t.id}
+                style={{ maxHeight: 320 }}
+                renderItem={({ item }) => {
+                  const targetNum = item.number ?? getTableNumber(item) ?? item.id;
+                  return (
+                    <TouchableOpacity
+                      style={styles.moveDestinationCard}
+                      onPress={() => {
+                        const targetId = item.tableId || item.id;
+                        if (!targetId) {
+                          setMoveError("Target table ID missing. Please refresh.");
+                          return;
+                        }
+                        handleMoveTable(targetId);
+                      }}
+                      activeOpacity={0.7}
+                      disabled={moveLoading}
+                    >
+                      <View style={styles.moveDestLeft}>
+                        <View style={styles.moveTablePill}>
+                          <Text style={styles.moveTablePillText}>T{targetNum}</Text>
+                        </View>
+                        <View>
+                          <Text style={styles.moveTableTitle}>Table {targetNum}</Text>
+                          <Text style={styles.moveTableFloor}>
+                            {item.floorName || "Available Floor"} • Ready for guests
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.moveActionPill}>
+                        <Text style={styles.moveActionPillText}>Move Here</Text>
+                        <MaterialIcons name="arrow-forward" size={16} color="#FFF" />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                    <MaterialIcons name="event-busy" size={36} color="#9CA3AF" />
+                    <Text style={{ color: "#6B7280", fontWeight: "700", marginTop: 8 }}>
+                      No Available Tables
+                    </Text>
+                    <Text style={{ color: "#9CA3AF", fontSize: 13, marginTop: 2, textAlign: "center" }}>
+                      All tables are occupied or disabled. Free up a table to move.
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+
             <TouchableOpacity
-              onPress={() => setMoveModalOpen(false)}
-              style={styles.dialogCloseBtn}
+              onPress={() => {
+                if (!moveLoading) {
+                  setMoveModalOpen(false);
+                  setMoveError(null);
+                }
+              }}
+              style={styles.moveCancelBtn}
             >
-              <Text style={{ color: "#FFF", fontWeight: "700" }}>Close</Text>
+              <Text style={styles.moveCancelBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       {/* ═════════════════════════════════════════════════════════════════════ 
-         PRINT MODAL
+         PRINT MODAL (Redesigned)
          ═════════════════════════════════════════════════════════════════════ */}
       <Modal
         visible={printModalOpen}
@@ -1936,13 +2502,32 @@ export default function CustomizeTables() {
         onRequestClose={() => setPrintModalOpen(false)}
       >
         <View style={styles.centeredOverlay}>
-          <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Print Bill</Text>
-            <Text style={{ marginBottom: 20, color: "#666" }}>
-              Export bill for table?
-            </Text>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setPrintModalOpen(false)}
+          />
+          <View style={styles.modernMoveDialog}>
+            <View style={styles.moveDialogHeader}>
+              <View style={[styles.moveIconBadge, { backgroundColor: "#F0F9FF" }]}>
+                <MaterialIcons name="print" size={24} color="#0369A1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.moveDialogTitle}>Print Bill</Text>
+                <Text style={styles.moveDialogSubtitle}>
+                  Export or share the bill
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setPrintModalOpen(false)}
+                style={styles.closeBtnSmall}
+              >
+                <MaterialIcons name="close" size={18} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
-              style={[styles.dialogCloseBtn, { backgroundColor: "#F97316" }]}
+              style={[styles.moveDestinationCard, { backgroundColor: "#F0F9FF", borderColor: "#BAE6FD" }]}
               onPress={async () => {
                 const t = tablesData.find((x) => x.id === printSource);
                 if (t) {
@@ -1958,19 +2543,28 @@ export default function CustomizeTables() {
                 }
                 setPrintModalOpen(false);
               }}
+              activeOpacity={0.7}
             >
-              <Text style={{ color: "#000", fontWeight: "700" }}>
-                Export CSV
-              </Text>
+              <View style={styles.moveDestLeft}>
+                <View style={[styles.moveTablePill, { backgroundColor: "#E0F2FE" }]}>
+                  <MaterialIcons name="description" size={18} color="#0369A1" />
+                </View>
+                <View>
+                  <Text style={styles.moveTableTitle}>Export as CSV</Text>
+                  <Text style={styles.moveTableFloor}>Share bill data via system share</Text>
+                </View>
+              </View>
+              <View style={[styles.moveActionPill, { backgroundColor: "#0369A1" }]}>
+                <Text style={styles.moveActionPillText}>Export</Text>
+                <MaterialIcons name="share" size={16} color="#FFF" />
+              </View>
             </TouchableOpacity>
+
             <TouchableOpacity
               onPress={() => setPrintModalOpen(false)}
-              style={[
-                styles.dialogCloseBtn,
-                { marginTop: 10, backgroundColor: "#9CA3AF" },
-              ]}
+              style={styles.moveCancelBtn}
             >
-              <Text style={{ color: "#FFF", fontWeight: "700" }}>Cancel</Text>
+              <Text style={styles.moveCancelBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1982,8 +2576,7 @@ export default function CustomizeTables() {
       <Modal
         visible={paidModalOpen}
         transparent
-        animationType="slide"
-        statusBarTranslucent
+        animationType="fade"
         onRequestClose={() => {
           if (!paidLoading) {
             setPaidModalOpen(false);
@@ -1991,9 +2584,9 @@ export default function CustomizeTables() {
           }
         }}
       >
-        <View style={styles.bottomSheetOverlay}>
+        <View style={styles.centeredOverlay}>
           <TouchableOpacity
-            style={{ flex: 1 }}
+            style={StyleSheet.absoluteFill}
             activeOpacity={1}
             onPress={() => {
               if (!paidLoading) {
@@ -2002,11 +2595,33 @@ export default function CustomizeTables() {
               }
             }}
           />
-          <View style={styles.bottomSheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Mark as Paid</Text>
+          <View style={styles.modernMoveDialog}>
+            <View style={styles.moveDialogHeader}>
+              <View style={[styles.moveIconBadge, { backgroundColor: "#DCFCE7" }]}>
+                <MaterialIcons name="payments" size={24} color="#16A34A" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.moveDialogTitle}>Mark as Paid</Text>
+                {(() => {
+                  const tbl = tablesWithOrders.find((t) => t.id === paidSource);
+                  const tblNumber = tbl ? getTableNumber(tbl) : undefined;
+                  const bg = tblNumber !== undefined ? billGroups.get(tblNumber) : undefined;
+                  if (bg) {
+                    return (
+                      <Text style={styles.moveDialogSubtitle}>
+                        Paying will settle & free all {bg.linkedTableNumbers.length} tables (Combined bill)
+                      </Text>
+                    );
+                  }
+                  return (
+                    <Text style={styles.moveDialogSubtitle}>
+                      Table {tblNumber ? `T${tblNumber}` : paidSource}
+                    </Text>
+                  );
+                })()}
+              </View>
               <TouchableOpacity
-                style={styles.closeBtn}
+                style={styles.closeBtnSmall}
                 onPress={() => {
                   if (!paidLoading) {
                     setPaidModalOpen(false);
@@ -2014,117 +2629,76 @@ export default function CustomizeTables() {
                   }
                 }}
               >
-                <MaterialIcons name="close" size={18} color="#6B7280" />
+                <MaterialIcons name="close" size={20} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
-            {(() => {
-              const tbl = tablesWithOrders.find((t) => t.id === paidSource);
-              const tblNumber = tbl ? getTableNumber(tbl) : undefined;
-              const bg =
-                tblNumber !== undefined ? billGroups.get(tblNumber) : undefined;
-              return (
-                <>
-                  <Text
-                    style={{
-                      fontSize: 15,
-                      fontWeight: "600",
-                      color: "#374151",
-                      marginBottom: 4,
-                    }}
-                  >
-                    Table {tblNumber ? `T${tblNumber}` : paidSource}
-                  </Text>
-                  {bg && (
-                    <View style={[styles.mergedBadge, { marginBottom: 8 }]}>
-                      <Text style={styles.mergedBadgeText}>
-                        🔗 Combined bill with T
-                        {bg.linkedTableNumbers
-                          .filter((n) => n !== tblNumber)
-                          .join(", T")}
-                      </Text>
-                    </View>
-                  )}
-                  <Text style={{ marginBottom: 4, color: "#6B7280" }}>
-                    {tbl ? `${tbl.items} items • ${tbl.total}` : ""}
-                  </Text>
-                  {bg ? (
-                    <Text
-                      style={{
-                        marginBottom: 16,
-                        color: "#4338CA",
-                        fontWeight: "600",
-                        fontSize: 12,
-                      }}
-                    >
-                      Paying will settle & free all{" "}
-                      {bg.linkedTableNumbers.length} tables
-                    </Text>
-                  ) : (
-                    <View style={{ marginBottom: 16 }} />
-                  )}
-                </>
-              );
-            })()}
-
             {paidLoading ? (
               <View style={{ padding: 24, alignItems: "center" }}>
-                <ActivityIndicator size="large" color="#F97316" />
-                <Text style={{ marginTop: 10, color: "#6B7280" }}>
+                <ActivityIndicator size="large" color="#16A34A" />
+                <Text style={{ marginTop: 10, color: "#6B7280", fontWeight: "600" }}>
                   Processing payment...
                 </Text>
               </View>
             ) : (
               <View>
-                <Text
-                  style={{ marginBottom: 12, fontWeight: "700", color: "#111" }}
-                >
+                <Text style={{ marginBottom: 12, fontWeight: "700", color: "#111827", fontSize: 13 }}>
                   Select Payment Mode
                 </Text>
                 {(["cash", "card", "upi"] as const).map((mode) => (
                   <TouchableOpacity
                     key={mode}
-                    style={styles.paymentModeBtn}
-                              onPress={() => handleMarkPaid(paidSource || "", mode)}
+                    style={styles.moveDestinationCard}
+                    onPress={() => handleMarkPaid(paidSource || "", mode)}
                   >
-                    <View style={styles.paymentModeIcon}>
-                      <MaterialIcons
-                        name={
-                          mode === "cash"
-                            ? "payments"
+                    <View style={styles.moveDestLeft}>
+                      <View style={[styles.moveTablePill, { backgroundColor: "#F3F4F6" }]}>
+                        <MaterialIcons
+                          name={
+                            mode === "cash"
+                              ? "payments"
+                              : mode === "card"
+                                ? "credit-card"
+                                : "phone-android"
+                          }
+                          size={22}
+                          color="#4B5563"
+                        />
+                      </View>
+                      <View>
+                        <Text style={styles.moveTableTitle}>
+                          {mode === "cash"
+                            ? "Cash"
                             : mode === "card"
-                              ? "credit-card"
-                              : "phone-android"
-                        }
-                        size={22}
-                        color="#F97316"
-                      />
+                              ? "Card"
+                              : "UPI"}
+                        </Text>
+                        <Text style={styles.moveTableFloor}>
+                          {mode === "cash"
+                            ? "Pay with cash"
+                            : mode === "card"
+                              ? "Debit/Credit card"
+                              : "Google Pay, PhonePe, etc."}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.paymentModeLabel}>
-                        {mode === "cash"
-                          ? "Cash"
-                          : mode === "card"
-                            ? "Card"
-                            : "UPI"}
-                      </Text>
-                      <Text style={styles.paymentModeSub}>
-                        {mode === "cash"
-                          ? "Pay with cash"
-                          : mode === "card"
-                            ? "Debit/Credit card"
-                            : "Google Pay, PhonePe, etc."}
-                      </Text>
-                    </View>
-                    <MaterialIcons
-                      name="chevron-right"
-                      size={20}
-                      color="#9CA3AF"
-                    />
+                    <MaterialIcons name="chevron-right" size={24} color="#D1D5DB" />
                   </TouchableOpacity>
                 ))}
               </View>
             )}
+            
+            <TouchableOpacity
+              style={styles.moveCancelBtn}
+              onPress={() => {
+                if (!paidLoading) {
+                  setPaidModalOpen(false);
+                  setPaidSource(null);
+                }
+              }}
+            >
+              <Text style={styles.moveCancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -2527,12 +3101,55 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
+  /* ── TABLE LEGEND ── */
+  tableLegendRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 14,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4B5563",
+  },
   tableCardFree: {
     backgroundColor: "#F9FAFB",
     borderStyle: "dashed" as any,
     borderColor: "#E5E7EB",
     shadowOpacity: 0.02,
     elevation: 0,
+  },
+  tableCardPending: {
+    borderColor: "#EF4444",
+    backgroundColor: "#FEF2F2",
+    shadowColor: "#EF4444",
+    shadowOpacity: 0.16,
+    borderWidth: 2,
+  },
+  tableCardDelivered: {
+    borderColor: "#10B981",
+    backgroundColor: "#ECFDF5",
+    shadowColor: "#10B981",
+    shadowOpacity: 0.16,
+    borderWidth: 2,
   },
   tableCardOccupied: {
     borderColor: "#FDBA74",
@@ -2551,6 +3168,34 @@ const styles = StyleSheet.create({
     backgroundColor: "#ECFDF5",
     shadowColor: "#10B981",
     shadowOpacity: 0.12,
+  },
+  statusBadgePendingSmall: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: "#FCA5A5",
+  },
+  statusBadgePendingSmallText: {
+    color: "#DC2626",
+    fontWeight: "800",
+    fontSize: 8,
+    textTransform: "uppercase",
+  },
+  statusBadgeDeliveredSmall: {
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: "#A7F3D0",
+  },
+  statusBadgeDeliveredSmallText: {
+    color: "#059669",
+    fontWeight: "800",
+    fontSize: 8,
+    textTransform: "uppercase",
   },
   tableCardHeader: {
     flexDirection: "row",
@@ -2621,6 +3266,525 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 25,
+  },
+  orderWindowContainer: {
+    backgroundColor: "#F9FAFB",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+    maxHeight: "88%",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 25,
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    backgroundColor: "#D1D5DB",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  paidHeaderBadge: {
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  paidHeaderBadgeText: {
+    color: "#059669",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  deliveredHeaderBadge: {
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  deliveredHeaderBadgeText: {
+    color: "#059669",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  pendingHeaderBadge: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  pendingHeaderBadgeText: {
+    color: "#DC2626",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  statusBannerPending: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FEF2F2",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: "#FCA5A5",
+  },
+  statusBannerDelivered: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#ECFDF5",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: "#A7F3D0",
+  },
+  statusBannerSeated: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7ED",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: "#FDBA74",
+    gap: 10,
+  },
+  statusBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  statusBannerTitlePending: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#DC2626",
+  },
+  statusBannerSubPending: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#991B1B",
+    marginTop: 2,
+  },
+  statusBannerTitleDelivered: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#059669",
+  },
+  statusBannerSubDelivered: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#065F46",
+    marginTop: 2,
+  },
+  statusBannerTitleSeated: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#C2410C",
+  },
+  statusBannerSubSeated: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#9A3412",
+    marginTop: 2,
+  },
+  bannerDeliveredBtn: {
+    backgroundColor: "#10B981",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  bannerDeliveredBtnText: {
+    color: "#FFF",
+    fontWeight: "800",
+    fontSize: 11,
+  },
+  servedBadge: {
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  servedBadgeText: {
+    color: "#059669",
+    fontWeight: "800",
+    fontSize: 11,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    marginTop: 6,
+  },
+  markAllSmallBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  markAllSmallBtnText: {
+    color: "#059669",
+    fontWeight: "700",
+    fontSize: 11,
+  },
+  ordersListContainer: {
+    gap: 10,
+    marginBottom: 14,
+  },
+  orderCardBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  orderCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  orderCardId: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  orderStatusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  orderStatusPillPending: {
+    backgroundColor: "#FEE2E2",
+  },
+  orderStatusPillDelivered: {
+    backgroundColor: "#D1FAE5",
+  },
+  orderStatusPillText: {
+    fontSize: 9,
+    fontWeight: "900",
+  },
+  orderStatusPillPendingText: {
+    color: "#DC2626",
+  },
+  orderStatusPillDeliveredText: {
+    color: "#059669",
+  },
+  orderStatusToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  orderStatusToggleBtnGreen: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#A7F3D0",
+  },
+  orderStatusToggleBtnOrange: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+  },
+  orderStatusToggleBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  orderClientNoteCallout: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+  },
+  orderClientNoteHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 2,
+  },
+  orderClientNoteTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#B45309",
+    letterSpacing: 0.5,
+  },
+  orderClientNoteBody: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#78350F",
+    lineHeight: 16,
+  },
+  orderItemsList: {
+    gap: 6,
+  },
+  orderItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 3,
+  },
+  orderItemQtyBadge: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  orderItemQtyText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1F2937",
+  },
+  orderItemName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+  orderItemVariant: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  orderItemNote: {
+    fontSize: 11,
+    color: "#D97706",
+    fontStyle: "italic",
+  },
+  orderItemPrice: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4B5563",
+  },
+  emptyOrdersCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 14,
+  },
+  emptyOrdersCardTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#4B5563",
+    marginTop: 6,
+  },
+  emptyOrdersCardSubtitle: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    textAlign: "center",
+    marginTop: 2,
+  },
+  primaryAddItemsBtn: {
+    backgroundColor: "#F97316",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginTop: 4,
+    marginBottom: 8,
+    shadowColor: "#F97316",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryAddItemsBtnText: {
+    color: "#FFF",
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  modernMoveDialog: {
+    backgroundColor: "#FFF",
+    borderRadius: 24,
+    padding: 20,
+    width: "90%",
+    maxHeight: "80%",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  moveDialogHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 14,
+  },
+  moveIconBadge: {
+    backgroundColor: "#FFF7ED",
+    padding: 8,
+    borderRadius: 12,
+  },
+  moveDialogTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  moveDialogSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  closeBtnSmall: {
+    padding: 4,
+  },
+  moveErrorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  moveErrorText: {
+    color: "#DC2626",
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
+  },
+  moveDestinationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F9FAFB",
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  moveDestLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  moveTablePill: {
+    backgroundColor: "#1F2937",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  moveTablePillText: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  moveTableTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  moveTableFloor: {
+    fontSize: 11,
+    color: "#6B7280",
+  },
+  moveActionPill: {
+    backgroundColor: "#F97316",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  moveActionPillText: {
+    color: "#FFF",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  moveCancelBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  moveCancelBtnText: {
+    color: "#6B7280",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  dialogBox: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    padding: 20,
+    width: "88%",
+    maxHeight: "80%",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  dialogItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  dialogItemText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+  mergedBadge: {
+    backgroundColor: "#EEF2FF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  mergedBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4338CA",
   },
   sheetHeader: {
     flexDirection: "row",

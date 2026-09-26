@@ -11,8 +11,10 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Modal,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import { WaiterColors } from "../../constants/theme";
 import { api } from "../../lib/apiClient";
 import WaiterWavyHeader from "../../components/waiter/WaiterWavyHeader";
@@ -96,7 +98,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   tabTextActive: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
-  listContent: { paddingHorizontal: 16, paddingBottom: 90 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 180 },
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -159,7 +161,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: 85,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
     borderTopColor: "#E2E8F0",
@@ -177,6 +179,91 @@ const styles = StyleSheet.create({
   },
   footerBtnDisabled: { opacity: 0.5 },
   footerBtnText: { color: "#fff", fontWeight: "800" },
+  instructionsBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    marginHorizontal: 16,
+    marginBottom: 100, // Make sure it sits above the footerBar which is at bottom: 85
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  instructionsInput: {
+    fontSize: 13,
+    color: WaiterColors.text,
+    minHeight: 36,
+  },
+  fab: {
+    position: "absolute",
+    bottom: 160,
+    right: 24,
+    backgroundColor: WaiterColors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+    shadowColor: WaiterColors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  fabText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(15, 23, 42, 0.4)",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  categoryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  modalCategoryText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#475569",
+    textTransform: "capitalize",
+  },
+  categoryTextActive: {
+    color: WaiterColors.primary,
+    fontWeight: "800",
+  },
 });
 
 export default function TakeOrder() {
@@ -200,7 +287,9 @@ export default function TakeOrder() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [cart, setCart] = useState<Record<string, CartEntry>>({});
+  const [specialInstructions, setSpecialInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   const parentCategories = useMemo(
     () => categories.filter((c) => !c.parent_id),
@@ -383,11 +472,17 @@ export default function TakeOrder() {
         return;
       }
 
+      const orderPayload: any = {
+        session_id: sessionId,
+      };
+      if (specialInstructions.trim()) {
+        orderPayload.special_instructions = specialInstructions.trim();
+        orderPayload.notes = specialInstructions.trim();
+      }
+
       const orderRes: any = await api.post(
         `/api/customer/orders?session_id=${sessionId}`,
-        {
-          session_id: sessionId,
-        },
+        orderPayload,
       );
       const orderId = orderRes?.order_id || orderRes?.orderId;
       if (!orderId) {
@@ -405,9 +500,15 @@ export default function TakeOrder() {
         });
       }
 
-      await api.post(`/api/customer/orders/finalize?session_id=${sessionId}`, {
+      const finalizePayload: any = {
         order_id: orderId,
-      });
+      };
+      if (specialInstructions.trim()) {
+        finalizePayload.special_instructions = specialInstructions.trim();
+        finalizePayload.notes = specialInstructions.trim();
+      }
+
+      await api.post(`/api/customer/orders/finalize?session_id=${sessionId}`, finalizePayload);
       Alert.alert("Success", "Order placed successfully.");
       router.replace("/waiter/customize-tables");
     } catch (e: any) {
@@ -436,30 +537,6 @@ export default function TakeOrder() {
         />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={styles.tabsScroll}
-        contentContainerStyle={styles.tabsContainer}
-      >
-        {categoryTabs.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveCategory(tab)}
-            style={[
-              styles.tab,
-              activeCategory === tab ? styles.tabActive : null,
-            ]}
-          >
-            <Text
-              style={
-                activeCategory === tab ? styles.tabTextActive : styles.tabText
-              }
-            >
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
       {loading ? (
         <View style={styles.loadingBox}>
@@ -556,6 +633,29 @@ export default function TakeOrder() {
         />
       )}
 
+      {totalItems > 0 && (
+        <View style={styles.instructionsBox}>
+          <TextInput
+            placeholder="📝 Special client notes / Kitchen instructions..."
+            placeholderTextColor="#94A3B8"
+            value={specialInstructions}
+            onChangeText={setSpecialInstructions}
+            style={styles.instructionsInput}
+            multiline
+          />
+        </View>
+      )}
+
+      {/* Filter FAB */}
+      <TouchableOpacity 
+        style={styles.fab} 
+        activeOpacity={0.8}
+        onPress={() => setFilterModalVisible(true)}
+      >
+        <MaterialIcons name="filter-list" size={24} color="#FFFFFF" />
+        <Text style={styles.fabText}>Filter</Text>
+      </TouchableOpacity>
+
       <View style={styles.footerBar}>
         <Text style={styles.footerTotal}>
           {totalItems} items · Rs {totalAmount.toLocaleString()}
@@ -573,6 +673,55 @@ export default function TakeOrder() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Categories Modal */}
+      <Modal
+        visible={filterModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setFilterModalVisible(false)} 
+          />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter by Category</Text>
+              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+                <MaterialIcons name="close" size={28} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {categoryTabs.map((tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  style={styles.categoryRow}
+                  onPress={() => {
+                    setActiveCategory(tab);
+                    setFilterModalVisible(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.modalCategoryText,
+                      activeCategory === tab && styles.categoryTextActive,
+                    ]}
+                  >
+                    {tab === "all" ? "All Categories" : tab}
+                  </Text>
+                  {activeCategory === tab && (
+                    <MaterialIcons name="check-circle" size={24} color={WaiterColors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }

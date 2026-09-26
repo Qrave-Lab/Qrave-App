@@ -443,7 +443,7 @@ export default function AdminProfile() {
                   ]}
                 >
                   <MaterialIcons
-                    name={card.icon}
+                    name={card.icon as any}
                     size={isCompact ? 22 : 24}
                     color={card.danger ? "#B91C1C" : "#1F2937"}
                   />

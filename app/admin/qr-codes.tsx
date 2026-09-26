@@ -1091,7 +1091,7 @@ const styles = StyleSheet.create({
   },
   previewImage: { borderRadius: 16 },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   frame: {
     position: "absolute",

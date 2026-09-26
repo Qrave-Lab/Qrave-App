@@ -93,7 +93,7 @@ export default function SplashScreen() {
       >
         <LinearGradient
           colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.92)"]}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
       </ImageBackground>
@@ -120,7 +120,7 @@ export default function SplashScreen() {
           offset: SCREEN_WIDTH * index,
           index,
         })}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
 
       {/* ── OVERLAY UI (Logo, Skip, Text, Dots, Button) ── */}
